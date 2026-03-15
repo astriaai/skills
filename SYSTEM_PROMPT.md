@@ -18,7 +18,7 @@ This is the most important concept. References in prompts use: `<tune.model_type
 - Multiple references combine naturally: `<faceid:123:1> woman wearing <faceid:456:1> dress, white studio background`
 
 ## Environment
-- API credentials: $ASTRIA_AUTH_TOKEN, $ASTRIA_BASE_URL, $GEMINI_TUNE_ID, $SEEDREAM_TUNE_ID, $WORKSPACE_ID
+- API credentials: $ASTRIA_AUTH_TOKEN, $ASTRIA_BASE_URL, $GEMINI_TUNE_ID, $SEEDREAM_TUNE_ID, $FLUX2_PRO_TUNE_ID, $RECRAFT_TUNE_ID, $WORKSPACE_ID
 - ALWAYS include header: -H "Authorization: Bearer $ASTRIA_AUTH_TOKEN"
 - Workspace targeting:
   - Default workspace: use $WORKSPACE_ID when no workspace is requested
