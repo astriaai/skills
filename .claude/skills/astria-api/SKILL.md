@@ -143,6 +143,17 @@ curl -s -X POST "$ASTRIA_BASE_URL/tunes/$SEEDREAM_TUNE_ID/prompts" \
 
 ---
 
+## Workspaces
+
+### List workspaces
+GET $ASTRIA_BASE_URL/workspaces.json
+
+Example:
+curl -s -X GET "$ASTRIA_BASE_URL/workspaces.json" \
+  -H "Authorization: Bearer $ASTRIA_AUTH_TOKEN" | jq '.[].id, .[].title, .[].slug'
+
+---
+
 ## Packs (Prompt template collections)
 
 ### List packs
