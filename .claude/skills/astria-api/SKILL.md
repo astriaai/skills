@@ -127,6 +127,106 @@ Parameters:
 
 ---
 
+### Video generation
+
+Video is created via the same `/tunes/:tune_id/prompts` endpoint. Video parameters are passed as their own form fields. The image stage (driven by the chosen tune) renders the first frame from `prompt[text]`, and the video model animates it using `prompt[video_prompt]`.
+
+Parameters:
+- `prompt[video_model]` (required for video) — one of the enum values below
+- `prompt[video_prompt]` (required for video) — natural-language description of the motion / action
+- `prompt[video_duration]` — seconds; allowed values depend on `video_model` (see table)
+- `prompt[video_first_frame]` — image upload to use as the first frame (overrides the rendered image)
+- `prompt[video_last_frame]` — image upload for first+last keyframe models
+- `prompt[input_video]` — video upload for motion-control models (required for `*_motion_control*`, `wan_animate_*`, `dreamactor_m2`, `happyhorse_motion_control`)
+- `prompt[aspect_ratio]` — passed through to the video model when supported
+
+Example — image-to-video via Seedance 2 Fast 720p (Gemini renders the first frame from `text`, then the video model animates it):
+```
+curl -s -X POST "$ASTRIA_BASE_URL/tunes/$GEMINI_TUNE_ID/prompts" \
+  -H "Authorization: Bearer $ASTRIA_AUTH_TOKEN" \
+  -H "X-Workspace-Id: $WORKSPACE_ID" \
+  -F "prompt[text]=a model walking on a runway" \
+  -F "prompt[video_model]=seedance2_fast_720p" \
+  -F 'prompt[video_prompt]=camera tracks alongside as she walks confidently' \
+  -F "prompt[video_duration]=5" \
+  -F "prompt[aspect_ratio]=16:9" | jq '.id, .video_model, .video_prompt, .video_duration'
+```
+
+Example — HappyHorse 720p:
+```
+curl -s -X POST "$ASTRIA_BASE_URL/tunes/$GEMINI_TUNE_ID/prompts" \
+  -H "Authorization: Bearer $ASTRIA_AUTH_TOKEN" \
+  -H "X-Workspace-Id: $WORKSPACE_ID" \
+  -F "prompt[text]=A lone female explorer on a vast desert dune at dawn" \
+  -F "prompt[video_model]=happyhorse_720p" \
+  -F 'prompt[video_prompt]=She walks forward, sand blowing, cinematic' \
+  -F "prompt[video_duration]=5" \
+  -F "prompt[aspect_ratio]=16:9"
+```
+
+Example — motion-control with reference video:
+```
+curl -s -X POST "$ASTRIA_BASE_URL/tunes/$GEMINI_TUNE_ID/prompts" \
+  -H "Authorization: Bearer $ASTRIA_AUTH_TOKEN" \
+  -H "X-Workspace-Id: $WORKSPACE_ID" \
+  -F "prompt[text]=zwx man <faceid:123>" \
+  -F "prompt[video_model]=kling30_motion_control_pro" \
+  -F 'prompt[video_prompt]=match the dance moves' \
+  -F "prompt[video_duration]=10" \
+  -F "prompt[input_video]=@/path/to/reference.mp4"
+```
+
+#### `video_model` enum
+
+Models that accept multi-reference images (text-to-video capable too): `seedance2_*`, `happyhorse_720p`, `happyhorse_1080p`.
+Models that accept a last-frame keyframe: `seedance_v15_*`, `seedance2_*`, `kling30_*`, `kling25`, `wan27_*`, `wan26_*`, `wan22_*`, `wan21_*`, `ltx23_*`, `veo31_*`, `hailuo*`.
+Motion-control models (require `input_video`): `kling30_motion_control`, `kling30_motion_control_pro`, `wan_animate_720p`, `dreamactor_m2`, `happyhorse_motion_control`.
+
+| video_model                  | cost (¢) | video_duration options |
+|------------------------------|---------:|------------------------|
+| seedance_480p                |       10 | 2–12                   |
+| seedance_v15_720p            |       14 | 4–12                   |
+| seedance_v15_audio_720p      |       29 | 4–12                   |
+| cinematic_video              |       84 | 5, 10, 15              |
+| wan25_720p                   |       53 | 5, 10                  |
+| wan26_720p                   |       53 | 5, 10, 15              |
+| wan26_1080p                  |       79 | 5, 10, 15              |
+| wan27_720p                   |       55 | 5, 10, 15              |
+| wan27_1080p                  |       83 | 5, 10, 15              |
+| wan_animate_720p             |       44 | 10                     |
+| ltx23_720p                   |       17 | 5, 10, 15, 20          |
+| ltx23_1080p                  |       22 | 5, 10, 15, 20          |
+| happyhorse_720p              |       77 | 3–10                   |
+| happyhorse_1080p             |      132 | 3–10                   |
+| happyhorse_motion_control    |      154 | 10                     |
+| dreamactor_m2                |       29 | 10                     |
+| seedance2_fast_480p          |       60 | 4–15                   |
+| seedance2_fast_720p          |      140 | 4–15                   |
+| seedance2_480p               |      120 | 4–15                   |
+| seedance2_720p               |      280 | 4–15                   |
+| seedance2_1080p              |      450 | 4–15                   |
+| veo31_fast_720p              |       85 | 4, 6, 8                |
+| veo31_fast_audio_720p        |      126 | 4, 6, 8                |
+| veo31_fast_1080p             |       85 | 4, 6, 8                |
+| veo31_fast_audio_1080p       |      126 | 4, 6, 8                |
+| veo31_fast_4k                |      264 | 8                      |
+| veo31_fast_audio_4k          |      308 | 8                      |
+| veo31_lite_720p              |       44 | 4, 6, 8                |
+| veo31_lite_audio_720p        |       44 | 4, 6, 8                |
+| veo31_lite_1080p             |       71 | 4, 6, 8                |
+| veo31_lite_audio_1080p       |       71 | 4, 6, 8                |
+| kling30_standard             |       92 | 3–15                   |
+| kling30_standard_audio       |      139 | 3–15                   |
+| kling30_pro                  |      123 | 3–15                   |
+| kling30_pro_audio            |      185 | 3–15                   |
+| kling30_4k                   |      263 | 3–15                   |
+| kling30_motion_control       |      277 | 10                     |
+| kling30_motion_control_pro   |      370 | 10                     |
+
+Costs are per 5-second base (per 10s for motion-control / fixed-duration models) and scale linearly with `video_duration` for most models. Models suffixed `_audio` produce an audio track; otherwise the output is silent. Video output is delivered through the same `images[]` collection on the prompt response, with `content_type=video/mp4`.
+
+---
+
 ### Seedream 4.5
 POST $ASTRIA_BASE_URL/tunes/$SEEDREAM_TUNE_ID/prompts
 
