@@ -20,6 +20,17 @@ Use these directly in curl commands.
   - Omit `X-Workspace-Id` only when intentionally using personal/default scope without workspace context
 For better tool-call readability in chat logs, always include an explicit method with `-X` (for example, `-X GET`, `-X POST`) in Astria curl commands.
 
+## Pagination
+
+List endpoints (e.g. `/prompts`, `/tunes`, `/packs`) support `limit` and `offset` query string parameters:
+- `limit=N` — number of records to return (e.g. `?limit=100`)
+- `offset=Y` — number of records to skip (e.g. `?offset=200`)
+
+Combine for paging: `?limit=100&offset=200` returns records 201–300. Default sort is by id descending, so `offset` walks backwards through history.
+
+Example:
+curl -s -H "Authorization: Bearer $ASTRIA_AUTH_TOKEN" -H "X-Workspace-Id: $WORKSPACE_ID" "$ASTRIA_BASE_URL/prompts?limit=100&offset=0" | jq '.[].id'
+
 ---
 
 ## Users
@@ -37,8 +48,18 @@ curl -s -H "Authorization: Bearer $ASTRIA_AUTH_TOKEN" -H "X-Workspace-Id: $WORKS
 ### List tunes
 GET $ASTRIA_BASE_URL/tunes
 
+Filters:
+- `name=<class>` — filter by subject class name (e.g. `?name=shoes`)
+- `name[]=<a>&name[]=<b>` — filter by multiple class names (e.g. `?name[]=shoes&name[]=sandals`)
+
 Example:
 curl -s -H "Authorization: Bearer $ASTRIA_AUTH_TOKEN" -H "X-Workspace-Id: $WORKSPACE_ID" "$ASTRIA_BASE_URL/tunes" | jq '.[].id, .[].title, .[].name', .[].orig_images'
+
+Example — filter by a single name:
+curl -s -H "Authorization: Bearer $ASTRIA_AUTH_TOKEN" -H "X-Workspace-Id: $WORKSPACE_ID" "$ASTRIA_BASE_URL/tunes?name=shoes" | jq '.[].id, .[].title, .[].name'
+
+Example — filter by multiple names:
+curl -s -H "Authorization: Bearer $ASTRIA_AUTH_TOKEN" -H "X-Workspace-Id: $WORKSPACE_ID" "$ASTRIA_BASE_URL/tunes?name[]=shoes&name[]=sandals" | jq '.[].id, .[].title, .[].name'
 
 ### List public gallery tunes
 GET $ASTRIA_BASE_URL/gallery/tunes?model_type=faceid&limit=200
