@@ -45,12 +45,18 @@ curl -s -H "Authorization: Bearer $ASTRIA_AUTH_TOKEN" -H "X-Workspace-Id: $WORKS
 
 ## Tunes (Fine-tuned models)
 
+In user-facing language, **"tunes" and "references" are interchangeable** — when the user says "reference", "references", "product reference", or names a specific product/SKU, they mean a tune. Map both to the `/tunes` endpoint.
+
 ### List tunes
 GET $ASTRIA_BASE_URL/tunes
 
 Filters:
+- `title=<keyword>` — filter by tune title (substring match, e.g. `?title=brown dress` or `?title=SKU-1234`). Use this when the user references a tune/reference by name, product name, or product ID.
 - `name=<class>` — filter by subject class name (e.g. `?name=shoes`)
 - `name[]=<a>&name[]=<b>` — filter by multiple class names (e.g. `?name[]=shoes&name[]=sandals`)
+
+Example — filter by title (product name / keyword / SKU):
+curl -s -H "Authorization: Bearer $ASTRIA_AUTH_TOKEN" -H "X-Workspace-Id: $WORKSPACE_ID" "$ASTRIA_BASE_URL/tunes?title=brown%20dress" | jq '.[].id, .[].title, .[].name'
 
 Example:
 curl -s -H "Authorization: Bearer $ASTRIA_AUTH_TOKEN" -H "X-Workspace-Id: $WORKSPACE_ID" "$ASTRIA_BASE_URL/tunes" | jq '.[].id, .[].title, .[].name', .[].orig_images'
