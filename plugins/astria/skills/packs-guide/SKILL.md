@@ -8,6 +8,8 @@ description: Use when the user asks about packs, how automating AI photoshoots w
 ## What Are Packs?
 Packs are themed collections of prompt templates for generating consistent, professional images. Each pack contains curated prompts for a specific use case (headshots, fashion, products, etc.).
 
+> **"Pack" = "Template".** "Template" is the label used in the GUI; "pack" is the term used in the API, CLI, and URLs (`/p/:pack-slug`). They are interchangeable — when a user says "template" they mean a pack. (Not to be confused with the *prompt templates* — the individual prompts — that a pack contains.)
+
 Users upload reference images, then the pack's prompt templates generate images in the pack's theme using that reference.
 
 ## How Packs are used

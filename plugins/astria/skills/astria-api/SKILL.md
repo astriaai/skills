@@ -196,6 +196,8 @@ astria prompts list --pack-id 88 | \
 
 ## Packs
 
+Packs are surfaced in the Astria GUI as **Templates** — "pack" and "template" are interchangeable terms for the same object.
+
 ```bash
 astria packs list
 astria packs create --title "Spring Lookbook"
