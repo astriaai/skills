@@ -1,0 +1,1215 @@
+#!/usr/bin/env python3
+"""astria — command-line client for the Astria API.
+
+Credentials resolve in this order:
+  1. Environment variables  (ASTRIA_API_KEY or ASTRIA_AUTH_TOKEN, ASTRIA_BASE_URL,
+     WORKSPACE_ID, GEMINI_TUNE_ID, SEEDREAM_TUNE_ID, GPT_IMAGE_2_TUNE_ID)
+  2. ~/.astria/config.json  (written by `astria login`)
+
+Profiles work like the AWS CLI: `ASTRIA_PROFILE=localhost` (or
+`astria --profile localhost ...`) reads ~/.astria/config.localhost.json — a
+separate API key, base URL and workspace. The Astria web agent injects the
+environment variables instead, so it never needs a config file.
+
+Only depends on Python 3 stdlib + `curl` (used for the actual HTTP).
+"""
+import argparse
+import json
+import os
+import re
+import sqlite3
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+from urllib.parse import urlencode
+
+VERSION = "1.0.0"
+
+
+def _client_token():
+    """Identify the host environment for the User-Agent comment — an explicit
+    ASTRIA_CLIENT override, else the generic AI_AGENT marker, else Claude Code."""
+    val = (os.environ.get("ASTRIA_CLIENT")
+           or os.environ.get("AI_AGENT")
+           or ("claude-code" if os.environ.get("CLAUDECODE") else None))
+    if not val:
+        return None
+    return "".join(c for c in val if c.isalnum() or c in " ._/-")[:80]
+
+
+USER_AGENT = f"astria-cli/{VERSION}"
+_client = _client_token()
+if _client:
+    USER_AGENT += f" ({_client})"
+DEFAULT_BASE_URL = "https://api.astria.ai"
+
+CONFIG_DIR = Path(os.environ.get("ASTRIA_CONFIG_DIR") or (Path.home() / ".astria"))
+# CONFIG_PATH / MODELS_CACHE are profile-specific — finalised by apply_profile().
+ACTIVE_PROFILE = "default"
+CONFIG_PATH = CONFIG_DIR / "config.json"
+MODELS_CACHE = CONFIG_DIR / "models.json"
+
+# Offline fallback for the platform model tunes. The live ids come from the
+# /cli/models endpoint (cached in MODELS_CACHE, refreshed daily) — these values
+# are only used when that endpoint has never been reachable.
+MODEL_TUNES = {
+    "gemini": "3618064",
+    "seedream": "3691308",
+    "gpt-image-2": "4665564",
+}
+MODEL_ENV = {
+    "gemini": "GEMINI_TUNE_ID",
+    "seedream": "SEEDREAM_TUNE_ID",
+    "gpt-image-2": "GPT_IMAGE_2_TUNE_ID",
+}
+MODELS_TTL_DEFAULT = 86400
+
+POLL_INTERVAL_SEC = 4
+POLL_TIMEOUT_SEC = 8 * 60
+
+
+# --------------------------------------------------------------------------
+# errors / output
+# --------------------------------------------------------------------------
+class AstriaError(Exception):
+    pass
+
+
+def die(msg, code=1):
+    print(f"astria: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def emit(obj):
+    """Print a result as JSON on stdout — skills parse this."""
+    json.dump(obj, sys.stdout, ensure_ascii=False, indent=2)
+    sys.stdout.write("\n")
+
+
+# --------------------------------------------------------------------------
+# config + credential resolution
+# --------------------------------------------------------------------------
+def resolve_profile(cli_value):
+    """Profile precedence: --profile flag > ASTRIA_PROFILE env > 'default'."""
+    profile = cli_value or os.environ.get("ASTRIA_PROFILE") or "default"
+    if not profile.replace("-", "").replace("_", "").replace(".", "").isalnum():
+        die(f"invalid profile name {profile!r} — use letters, digits, '-', '_', '.'")
+    return profile
+
+
+def apply_profile(profile):
+    """Point CONFIG_PATH / MODELS_CACHE at this profile's files. The 'default'
+    profile keeps the original config.json / models.json names; a named profile
+    'X' uses config.X.json / models.X.json — like the AWS CLI's profiles."""
+    global ACTIVE_PROFILE, CONFIG_PATH, MODELS_CACHE
+    ACTIVE_PROFILE = profile
+    suffix = "" if profile == "default" else f".{profile}"
+    CONFIG_PATH = CONFIG_DIR / f"config{suffix}.json"
+    MODELS_CACHE = CONFIG_DIR / f"models{suffix}.json"
+
+
+def load_config():
+    if CONFIG_PATH.is_file():
+        try:
+            return json.loads(CONFIG_PATH.read_text())
+        except (OSError, ValueError):
+            return {}
+    return {}
+
+
+def save_config(cfg):
+    CONFIG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(json.dumps(cfg, indent=2) + "\n")
+    CONFIG_PATH.chmod(0o600)
+
+
+def api_key(cfg):
+    key = os.environ.get("ASTRIA_API_KEY") or os.environ.get("ASTRIA_AUTH_TOKEN") or cfg.get("api_key")
+    if not key:
+        die("not authenticated — run `astria login` (or set ASTRIA_API_KEY)")
+    return key
+
+
+def base_url(cfg):
+    return (os.environ.get("ASTRIA_BASE_URL") or cfg.get("base_url") or DEFAULT_BASE_URL).rstrip("/")
+
+
+def resolve_workspace(cfg, override):
+    """Workspace scope: --workspace flag > env > config. `all` and `personal` pass through."""
+    ws = override or os.environ.get("ASTRIA_WORKSPACE_ID") or os.environ.get("WORKSPACE_ID") or cfg.get("workspace_id")
+    return str(ws) if ws not in (None, "", "personal") else None
+
+
+# --- model catalog (/cli/models, cached daily) ---
+def load_models_cache():
+    if MODELS_CACHE.is_file():
+        try:
+            return json.loads(MODELS_CACHE.read_text())
+        except (OSError, ValueError):
+            return None
+    return None
+
+
+def models_cache_stale(record, cfg):
+    if not record or not record.get("models"):
+        return True
+    if record.get("base_url") != base_url(cfg):
+        return True
+    return time.time() - record.get("fetched_at", 0) > record.get("ttl", MODELS_TTL_DEFAULT)
+
+
+def fetch_models(cfg):
+    """Fetch /cli/models and write the cache. Returns the record, or None on failure."""
+    try:
+        payload = request(cfg, "GET", "/cli/models", auth=False, no_workspace=True)
+    except AstriaError:
+        return None
+    if not isinstance(payload, dict) or not isinstance(payload.get("models"), dict):
+        return None
+    record = {
+        "base_url": base_url(cfg),
+        "fetched_at": int(time.time()),
+        "ttl": payload.get("cache_ttl") or MODELS_TTL_DEFAULT,
+        "default": payload.get("default", "gemini"),
+        "models": payload["models"],
+        "cli": payload.get("cli") or {},
+    }
+    try:
+        CONFIG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+        MODELS_CACHE.write_text(json.dumps(record, indent=2) + "\n")
+    except OSError:
+        pass
+    return record
+
+
+def _version_tuple(v):
+    try:
+        return tuple(int(x) for x in str(v).split("."))
+    except (TypeError, ValueError):
+        return None
+
+
+def check_cli_version(record):
+    """Enforce the min/latest CLI version from the cached /cli/models `cli` block:
+    below min_version is a hard stop, below latest_version is an upgrade nudge."""
+    cli = (record or {}).get("cli") or {}
+    current = _version_tuple(VERSION)
+    if not current:
+        return
+    upgrade = cli.get("upgrade") or "please upgrade the astria CLI"
+    minimum = _version_tuple(cli.get("min_version"))
+    if minimum and current < minimum:
+        die(f"this astria CLI ({VERSION}) is no longer supported — {upgrade}")
+    latest = _version_tuple(cli.get("latest_version"))
+    if latest and current < latest:
+        print(f"astria: a newer CLI is available ({cli.get('latest_version')}) — {upgrade}",
+              file=sys.stderr)
+
+
+def model_catalog(cfg):
+    """Model name -> tune id catalog: the cached /cli/models response (refreshed
+    daily), falling back to built-in MODEL_TUNES when the endpoint is unreachable."""
+    record = load_models_cache()
+    if models_cache_stale(record, cfg):
+        record = fetch_models(cfg) or record
+    if record and record.get("models"):
+        return record
+    return {
+        "default": "gemini",
+        "models": {name: {"tune_id": tid} for name, tid in MODEL_TUNES.items()},
+        "builtin": True,
+    }
+
+
+def resolve_model(cfg, name):
+    """Map a model name (gemini/seedream/...) or a raw tune id to a tune id."""
+    catalog = None
+    if name is None:
+        name = cfg.get("default_model")
+    if name is None:
+        catalog = model_catalog(cfg)
+        name = catalog.get("default", "gemini")
+    if str(name).isdigit():
+        return str(name)
+    key = str(name).lower()
+    # 1. environment override — the Astria web app injects these
+    if key in MODEL_ENV and os.environ.get(MODEL_ENV[key]):
+        return os.environ[MODEL_ENV[key]]
+    # 2. explicit per-model override in the config file
+    if cfg.get(f"{key}_tune_id"):
+        return str(cfg[f"{key}_tune_id"])
+    # 3. the server catalog (cached daily)
+    if catalog is None:
+        catalog = model_catalog(cfg)
+    entry = catalog.get("models", {}).get(key)
+    if entry and entry.get("tune_id"):
+        return str(entry["tune_id"])
+    # 4. built-in offline fallback
+    if key in MODEL_TUNES:
+        return MODEL_TUNES[key]
+    die(f"unknown model {name!r} — run `astria models` to list available models, or pass a numeric tune id")
+
+
+# --------------------------------------------------------------------------
+# HTTP — delegated to curl (handles multipart uploads, redirects, retries)
+# --------------------------------------------------------------------------
+def request(cfg, method, path, *, query=None, form=None, json_body=None, workspace=None,
+            no_workspace=False, auth=True):
+    url = base_url(cfg) + path
+    if query:
+        url += ("&" if "?" in url else "?") + urlencode(query, doseq=True)
+
+    argv = ["curl", "-sS", "--retry", "2", "--max-time", "120", "-A", USER_AGENT, "-X", method,
+            "-H", "Accept: application/json"]
+    if auth:
+        argv += ["-H", f"Authorization: Bearer {api_key(cfg)}"]
+
+    if not no_workspace:
+        ws = workspace if workspace is not None else resolve_workspace(cfg, None)
+        if ws:
+            argv += ["-H", f"X-Workspace-Id: {ws}"]
+
+    stdin = None
+    if json_body is not None:
+        argv += ["-H", "Content-Type: application/json", "--data-binary", "@-"]
+        stdin = json.dumps(json_body).encode()
+    for key, value in (form or []):
+        argv += ["-F", f"{key}={value}"]
+
+    argv += ["-w", "\n%{http_code}", url]
+
+    try:
+        proc = subprocess.run(argv, input=stdin, capture_output=True)
+    except FileNotFoundError:
+        die("`curl` not found on PATH — install curl")
+
+    if proc.returncode != 0:
+        raise AstriaError(f"network error ({method} {path}): {proc.stderr.decode('utf-8', 'replace').strip()}")
+
+    raw = proc.stdout.decode("utf-8", "replace")
+    body, _, status = raw.rpartition("\n")
+    try:
+        status = int(status)
+    except ValueError:
+        raise AstriaError(f"unexpected curl output for {method} {path}")
+
+    parsed = None
+    if body.strip():
+        try:
+            parsed = json.loads(body)
+        except ValueError:
+            parsed = None
+
+    if status == 426:
+        hint = (parsed.get("upgrade") or parsed.get("error")) if isinstance(parsed, dict) else None
+        die(f"this astria CLI ({VERSION}) is no longer supported — {hint or 'please upgrade to continue'}")
+    if status >= 400:
+        msg = None
+        if isinstance(parsed, dict):
+            msg = parsed.get("error") or parsed.get("message")
+        raise AstriaError(f"{method} {path} → HTTP {status}: {msg or body.strip()[:400]}")
+
+    return parsed if parsed is not None else body
+
+
+def field(key, value):
+    """A multipart field; for files pass a path and it is sent with curl's @ prefix."""
+    return (key, value)
+
+
+def media_field(prefix, value):
+    """Resolve an image/video argument to the right form field: URL vs local file.
+
+    A URL goes in the `_url` variant of the field, with the suffix inserted
+    inside the param brackets — `prompt[input_image]` -> `prompt[input_image_url]`."""
+    if str(value).startswith(("http://", "https://")):
+        url_key = f"{prefix[:-1]}_url]" if prefix.endswith("]") else f"{prefix}_url"
+        return field(url_key, value)
+    if not Path(value).is_file():
+        die(f"file not found: {value}")
+    return field(prefix, f"@{value}")
+
+
+# --------------------------------------------------------------------------
+# polling
+# --------------------------------------------------------------------------
+def poll_prompt(cfg, tune_id, prompt_id, workspace=None):
+    deadline = time.monotonic() + POLL_TIMEOUT_SEC
+    while time.monotonic() < deadline:
+        prompt = request(cfg, "GET", f"/tunes/{tune_id}/prompts/{prompt_id}", workspace=workspace)
+        if prompt.get("images"):
+            return prompt
+        time.sleep(POLL_INTERVAL_SEC)
+    raise AstriaError(f"prompt {prompt_id} did not finish within {POLL_TIMEOUT_SEC}s")
+
+
+# --------------------------------------------------------------------------
+# commands — auth
+# --------------------------------------------------------------------------
+def cmd_login(args, cfg):
+    key = args.api_key
+    if not key:
+        if sys.stdin.isatty():
+            try:
+                import getpass
+                key = getpass.getpass("Astria API key (astria.ai/users/edit/api): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                die("aborted")
+        else:
+            key = sys.stdin.readline().strip()
+    if not key:
+        die("no API key provided")
+
+    cfg["api_key"] = key
+    if args.base_url:
+        cfg["base_url"] = args.base_url.rstrip("/")
+    if args.workspace:
+        cfg["workspace_id"] = args.workspace
+    save_config(cfg)
+
+    try:
+        user = request(cfg, "GET", "/users", no_workspace=True)
+        who = user.get("name") or user.get("email") or "your account"
+        print(f"Logged in as {who} (profile '{ACTIVE_PROFILE}'). Config saved to {CONFIG_PATH}")
+    except AstriaError as exc:
+        die(f"saved key but verification failed: {exc}")
+
+
+def cmd_logout(args, cfg):
+    if CONFIG_PATH.is_file():
+        CONFIG_PATH.unlink()
+        print(f"Removed {CONFIG_PATH}")
+    else:
+        print("Not logged in.")
+
+
+def cmd_whoami(args, cfg):
+    user = request(cfg, "GET", "/users", no_workspace=True)
+    emit({k: user.get(k) for k in ("id", "name", "email", "usd_balance_mc", "purchased_plugin_at")})
+
+
+def cmd_config(args, cfg):
+    if args.action == "get" or args.action is None:
+        emit({
+            "profile": ACTIVE_PROFILE,
+            "base_url": base_url(cfg),
+            "workspace_id": resolve_workspace(cfg, None),
+            "default_model": cfg.get("default_model", "gemini"),
+            "config_path": str(CONFIG_PATH),
+            "authenticated": bool(os.environ.get("ASTRIA_API_KEY") or os.environ.get("ASTRIA_AUTH_TOKEN") or cfg.get("api_key")),
+        })
+    elif args.action == "set":
+        if not args.key or args.value is None:
+            die("usage: astria config set <key> <value>")
+        allowed = {"base_url", "workspace_id", "default_model",
+                   "gemini_tune_id", "seedream_tune_id", "gpt-image-2_tune_id"}
+        if args.key not in allowed:
+            die(f"unknown config key {args.key!r} — one of: {', '.join(sorted(allowed))}")
+        cfg[args.key] = args.value
+        save_config(cfg)
+        print(f"Set {args.key} = {args.value}")
+
+
+def cmd_models(args, cfg):
+    record = fetch_models(cfg) if args.refresh else model_catalog(cfg)
+    if record is None:
+        die("could not refresh models from the server")
+    emit({
+        "default": record.get("default", "gemini"),
+        "source": "built-in (offline)" if record.get("builtin") else "server",
+        "models": record.get("models", {}),
+    })
+
+
+# --------------------------------------------------------------------------
+# commands — tunes / references
+# --------------------------------------------------------------------------
+def cmd_tunes_list(args, cfg):
+    query = []
+    if args.title:
+        query.append(("title", args.title))
+    for name in args.name or []:
+        query.append(("name[]", name))
+    if args.limit:
+        query.append(("limit", args.limit))
+    if args.offset:
+        query.append(("offset", args.offset))
+    if args.model_type:
+        query.append(("model_type", args.model_type))
+    path = "/gallery/tunes" if args.gallery else "/tunes"
+    tunes = request(cfg, "GET", path, query=query, workspace=args.workspace)
+    emit([{k: t.get(k) for k in ("id", "title", "name", "model_type", "orig_images")} for t in tunes])
+
+
+def cmd_tunes_get(args, cfg):
+    emit(request(cfg, "GET", f"/tunes/{args.id}", workspace=args.workspace))
+
+
+def cmd_tunes_create(args, cfg):
+    form = [
+        field("tune[title]", args.title),
+        field("tune[name]", args.name),
+        field("tune[model_type]", args.model_type),
+        field("tune[base_tune_id]", resolve_model(cfg, args.model)),
+    ]
+    if args.description:
+        form.append(field("tune[characteristics]", json.dumps({"short_description": args.description})))
+    for url in args.image_url or []:
+        form.append(field("tune[image_urls][]", url))
+    for path in args.image or []:
+        if not Path(path).is_file():
+            die(f"file not found: {path}")
+        form.append(field("tune[images][]", f"@{path}"))
+    if not (args.image_url or args.image):
+        die("provide at least one --image-url or --image")
+    emit(request(cfg, "POST", "/tunes", form=form, workspace=args.workspace))
+
+
+def cmd_tunes_update(args, cfg):
+    form = []
+    if args.title:
+        form.append(field("tune[title]", args.title))
+    if args.name:
+        form.append(field("tune[name]", args.name))
+    if args.description:
+        form.append(field("tune[characteristics]", json.dumps({"short_description": args.description})))
+    if not form:
+        die("nothing to update — pass --title, --name or --description")
+    emit(request(cfg, "PATCH", f"/tunes/{args.id}", form=form, workspace=args.workspace))
+
+
+# --------------------------------------------------------------------------
+# commands — prompts
+# --------------------------------------------------------------------------
+def cmd_prompts_list(args, cfg):
+    query = []
+    for key in ("text", "pack_id", "base_pack_id", "tune_id", "user_id"):
+        value = getattr(args, key, None)
+        if value:
+            query.append((key, value))
+    if args.limit:
+        query.append(("limit", args.limit))
+    if args.offset:
+        query.append(("offset", args.offset))
+    path = f"/tunes/{args.tune_id}/prompts" if args.tune_id else "/prompts"
+    prompts = request(cfg, "GET", path, query=query, workspace=args.workspace)
+    emit([{k: p.get(k) for k in ("id", "text", "num_images", "images", "aspect_ratio",
+                                 "resolution", "pack_id", "tune_id")} for p in prompts])
+
+
+def cmd_prompts_get(args, cfg):
+    tune_id = resolve_model(cfg, args.model) if args.model else args.tune
+    emit(request(cfg, "GET", f"/tunes/{tune_id}/prompts/{args.id}", workspace=args.workspace))
+
+
+def cmd_prompts_update(args, cfg):
+    tune_id = resolve_model(cfg, args.model) if args.model else args.tune
+    form = []
+    if args.pack_id:
+        form.append(field("prompt[pack_id]", args.pack_id))
+    if args.workspace_id:
+        form.append(field("prompt[workspace_id]", args.workspace_id))
+    if not form:
+        die("nothing to update — pass --pack-id or --workspace-id")
+    emit(request(cfg, "PATCH", f"/tunes/{tune_id}/prompts/{args.id}", form=form, workspace=args.workspace))
+
+
+# --------------------------------------------------------------------------
+# commands — generate (image) / video
+# --------------------------------------------------------------------------
+def _generate(args, cfg, video):
+    tune_id = resolve_model(cfg, args.model)
+    form = [field("prompt[text]", args.text)]
+    if args.num_images:
+        form.append(field("prompt[num_images]", args.num_images))
+    if args.aspect_ratio:
+        form.append(field("prompt[aspect_ratio]", args.aspect_ratio))
+    if getattr(args, "resolution", None):
+        form.append(field("prompt[resolution]", args.resolution))
+    if getattr(args, "input_image", None):
+        key, value = media_field("prompt[input_image]", args.input_image)
+        form.append(field(key, value))
+    if video:
+        form.append(field("prompt[video_model]", args.video_model))
+        form.append(field("prompt[video_prompt]", args.video_prompt))
+        if args.duration:
+            form.append(field("prompt[video_duration]", args.duration))
+        for opt, prefix in (("first_frame", "prompt[video_first_frame]"),
+                            ("last_frame", "prompt[video_last_frame]"),
+                            ("input_video", "prompt[input_video]")):
+            value = getattr(args, opt, None)
+            if value:
+                key, resolved = media_field(prefix, value)
+                form.append(field(key, resolved))
+
+    prompt = request(cfg, "POST", f"/tunes/{tune_id}/prompts", form=form, workspace=args.workspace)
+    prompt = prompt[0] if isinstance(prompt, list) else prompt
+    if args.pack_id:
+        request(cfg, "PATCH", f"/tunes/{tune_id}/prompts/{prompt['id']}",
+                form=[field("prompt[pack_id]", args.pack_id)], workspace=args.workspace)
+    if args.wait:
+        prompt = poll_prompt(cfg, tune_id, prompt["id"], workspace=args.workspace)
+    emit(prompt)
+
+
+def cmd_generate(args, cfg):
+    _generate(args, cfg, video=False)
+
+
+def cmd_video(args, cfg):
+    _generate(args, cfg, video=True)
+
+
+# --------------------------------------------------------------------------
+# commands — packs / workspaces
+# --------------------------------------------------------------------------
+def cmd_packs_list(args, cfg):
+    query = []
+    if args.limit:
+        query.append(("limit", args.limit))
+    if args.offset:
+        query.append(("offset", args.offset))
+    packs = request(cfg, "GET", "/packs", query=query, workspace=args.workspace)
+    emit([{k: p.get(k) for k in ("id", "title", "slug", "subtitle", "main_class_name")} for p in packs])
+
+
+def cmd_packs_create(args, cfg):
+    payload = {"pack": {
+        "title": args.title,
+        "base_tune_id": int(resolve_model(cfg, args.model)),
+        "model_type": args.model_type,
+    }}
+    if args.subtitle:
+        payload["pack"]["subtitle"] = args.subtitle
+    emit(request(cfg, "POST", "/packs", json_body=payload, workspace=args.workspace))
+
+
+def cmd_workspaces_list(args, cfg):
+    workspaces = request(cfg, "GET", "/workspaces.json", no_workspace=True)
+    emit([{k: w.get(k) for k in ("id", "title", "slug")} for w in workspaces])
+
+
+# --------------------------------------------------------------------------
+# commands — workspace landing page
+# --------------------------------------------------------------------------
+def cmd_landing_get(args, cfg):
+    ws = resolve_workspace(cfg, args.workspace)
+    if not ws:
+        die("a workspace is required — pass --workspace or set WORKSPACE_ID")
+    workspace = request(cfg, "GET", f"/workspaces/{ws}.json", workspace=ws)
+    if args.html:
+        sys.stdout.write((workspace.get("landing_page_html") or "") + "\n")
+    else:
+        emit(workspace)
+
+
+def cmd_landing_set(args, cfg):
+    ws = resolve_workspace(cfg, args.workspace)
+    if not ws:
+        die("a workspace is required — pass --workspace or set WORKSPACE_ID")
+    if args.brief:
+        form = [field("workspace[brief]", args.brief)]
+    else:
+        if not Path(args.html_file).is_file():
+            die(f"file not found: {args.html_file}")
+        form = [field("workspace[landing_page_html]", f"@{args.html_file}")]
+    emit(request(cfg, "PATCH", f"/workspaces/{ws}.json", form=form, workspace=ws))
+
+
+# --------------------------------------------------------------------------
+# commands — cache (local snapshot of tunes/prompts/packs/user)
+# --------------------------------------------------------------------------
+CACHE_FIELDS = {
+    "tunes": ("id", "title", "name", "orig_images"),
+    "prompts": ("id", "text", "num_images", "images", "aspect_ratio", "resolution", "input_image", "input_video"),
+    "packs": ("id", "title", "slug", "main_class_name", "multiplier", "multiplier_api"),
+    "user": ("usd_balance_mc", "email", "name", "purchased_plugin_at"),
+}
+CACHE_MAX_AGE = 86400
+
+
+def cache_dir(cfg, override):
+    ws = resolve_workspace(cfg, override) or "personal"
+    slug = "".join(c if c.isalnum() or c in "_.-" else "_" for c in ws)
+    root = Path(os.environ.get("ASTRIA_CACHE_DIR") or (Path.cwd() / ".cache"))
+    return root / f"ws_{slug}"
+
+
+# Indexed columns mirrored from the full record into the SQLite store. Each
+# table also gets a `json` TEXT column holding the complete record. These are
+# the columns `astria cache get/find/uses` query against — no API calls.
+DB_COLUMNS = {
+    "tunes": ("id", "name", "title"),
+    "prompts": ("id", "text", "pack_id", "tune_id", "num_images", "aspect_ratio", "resolution"),
+    "packs": ("id", "title", "slug", "main_class_name"),
+}
+CACHE_DB_NAME = "cache.db"
+
+
+def cache_fetch(cfg, resource, workspace, out_dir):
+    """Fetch one resource, write its `<resource>.json` snapshot, and return the
+    raw API data so the caller can also load it into the SQLite store."""
+    endpoint = "/users" if resource == "user" else f"/{resource}"
+    data = request(cfg, "GET", endpoint, workspace=workspace, no_workspace=(workspace is None))
+    fields = CACHE_FIELDS[resource]
+    if isinstance(data, list):
+        shaped = [{k: row.get(k) for k in fields} for row in data]
+    else:
+        shaped = {k: data.get(k) for k in fields}
+    (out_dir / f"{resource}.json").write_text(json.dumps(shaped, ensure_ascii=False, indent=2))
+    return data
+
+
+def cache_db_path(cfg, override):
+    return cache_dir(cfg, override) / CACHE_DB_NAME
+
+
+def open_cache_db(cfg, override, *, require=False):
+    """Open the local cache SQLite DB. With require=True, die() if it is missing
+    so query commands point the user at `astria cache refresh`."""
+    path = cache_db_path(cfg, override)
+    if require and not path.is_file():
+        die(f"no local cache at {path} — run `astria cache refresh` first")
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def db_init_schema(conn):
+    """(Re)create the tunes/prompts/packs tables and their indexes."""
+    for table, columns in DB_COLUMNS.items():
+        conn.execute(f"DROP TABLE IF EXISTS {table}")
+        cols = ", ".join(f"{c} INTEGER PRIMARY KEY" if c == "id" else f"{c} TEXT" for c in columns)
+        conn.execute(f"CREATE TABLE {table} ({cols}, json TEXT NOT NULL)")
+        for col in columns:
+            if col != "id":
+                conn.execute(f"CREATE INDEX idx_{table}_{col} ON {table} ({col})")
+
+
+def db_load_resource(conn, resource, data):
+    """Replace one table's rows from raw API data (a list of records)."""
+    columns = DB_COLUMNS[resource]
+    conn.execute(f"DELETE FROM {resource}")
+    rows = data if isinstance(data, list) else [data]
+    placeholders = ", ".join(["?"] * (len(columns) + 1))
+    conn.executemany(
+        f"INSERT OR REPLACE INTO {resource} ({', '.join(columns)}, json) VALUES ({placeholders})",
+        [tuple(row.get(c) for c in columns) + (json.dumps(row, ensure_ascii=False),) for row in rows],
+    )
+
+
+def cmd_cache(args, cfg):
+    if args.action == "path":
+        print(cache_dir(cfg, args.workspace))
+        return
+    if args.action == "get":
+        cmd_cache_get(args, cfg)
+        return
+    if args.action == "find":
+        cmd_cache_find(args, cfg)
+        return
+    if args.action == "uses":
+        cmd_cache_uses(args, cfg)
+        return
+    if args.action == "stats":
+        cmd_cache_stats(args, cfg)
+        return
+
+    # action == "refresh"
+    workspace = resolve_workspace(cfg, args.workspace)
+    out_dir = cache_dir(cfg, args.workspace)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = out_dir / "_refreshed_at"
+
+    if args.resource:
+        data = cache_fetch(cfg, args.resource, workspace, out_dir)
+        if args.resource in DB_COLUMNS:
+            conn = open_cache_db(cfg, args.workspace)
+            conn.execute(f"CREATE TABLE IF NOT EXISTS {args.resource} "
+                         f"({', '.join(DB_COLUMNS[args.resource])}, json TEXT NOT NULL)")
+            db_load_resource(conn, args.resource, data)
+            conn.commit()
+            conn.close()
+        stamp.write_text(str(int(time.time())))
+        print(f"refreshed {args.resource} → {out_dir}")
+        return
+
+    if not args.force and stamp.is_file():
+        age = time.time() - int(stamp.read_text() or 0)
+        if age < CACHE_MAX_AGE:
+            print(f"cache fresh ({int(age)}s old) — {out_dir}")
+            return
+
+    errors = []
+    fetched = {}
+
+    def worker(resource):
+        try:
+            fetched[resource] = cache_fetch(cfg, resource, workspace, out_dir)
+        except AstriaError as exc:
+            errors.append(str(exc))
+
+    threads = [threading.Thread(target=worker, args=(r,)) for r in CACHE_FIELDS]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    if errors:
+        die("; ".join(errors))
+
+    conn = open_cache_db(cfg, args.workspace)
+    db_init_schema(conn)
+    for resource in DB_COLUMNS:
+        db_load_resource(conn, resource, fetched[resource])
+    conn.commit()
+    conn.close()
+
+    stamp.write_text(str(int(time.time())))
+    print(f"refreshed tunes, prompts, packs, user → {out_dir}")
+
+
+def cmd_cache_get(args, cfg):
+    conn = open_cache_db(cfg, args.workspace, require=True)
+    row = conn.execute(f"SELECT json FROM {args.table} WHERE id = ?", (args.id,)).fetchone()
+    conn.close()
+    if row is None:
+        die(f"no {args.table} record with id {args.id} in the local cache")
+    emit(json.loads(row["json"]))
+
+
+def cmd_cache_find(args, cfg):
+    conn = open_cache_db(cfg, args.workspace, require=True)
+    # filter -> (column, mode): 'eq' for exact match, 'like' for substring
+    filters = {
+        "tunes": {"name": ("name", "like"), "title": ("title", "like")},
+        "prompts": {"pack_id": ("pack_id", "eq"), "tune_id": ("tune_id", "eq"),
+                    "text": ("text", "like")},
+        "packs": {"main_class": ("main_class_name", "like"), "title": ("title", "like")},
+    }[args.table]
+    clauses, params = [], []
+    for arg_name, (column, mode) in filters.items():
+        value = getattr(args, arg_name, None)
+        if value is None:
+            continue
+        if mode == "like":
+            clauses.append(f"{column} LIKE ?")
+            params.append(f"%{value}%")
+        else:
+            clauses.append(f"{column} = ?")
+            params.append(value)
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = conn.execute(f"SELECT json FROM {args.table}{where} ORDER BY id DESC", params).fetchall()
+    conn.close()
+    emit([json.loads(r["json"]) for r in rows])
+
+
+# Tunes are referenced inside prompt text via tokens like <faceid:1234:1> or
+# <lora:1234:0.8> — the id is the first colon-separated field after the type.
+TUNE_TOKEN_RE = re.compile(r"<[a-z0-9_]+:(\d+):[^>]*>", re.IGNORECASE)
+
+
+def cmd_cache_uses(args, cfg):
+    conn = open_cache_db(cfg, args.workspace, require=True)
+    rows = conn.execute("SELECT json FROM prompts WHERE text LIKE ?",
+                        (f"%{args.tune_id}%",)).fetchall()
+    conn.close()
+    target = str(args.tune_id)
+    matches = [
+        json.loads(r["json"]) for r in rows
+        if target in TUNE_TOKEN_RE.findall(json.loads(r["json"]).get("text") or "")
+    ]
+    emit(matches)
+
+
+def cmd_cache_stats(args, cfg):
+    path = cache_db_path(cfg, args.workspace)
+    if not path.is_file():
+        die(f"no local cache at {path} — run `astria cache refresh` first")
+    conn = open_cache_db(cfg, args.workspace, require=True)
+    counts = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in DB_COLUMNS}
+    conn.close()
+    stamp = cache_dir(cfg, args.workspace) / "_refreshed_at"
+    age = int(time.time() - int(stamp.read_text() or 0)) if stamp.is_file() else None
+    emit({
+        "db_path": str(path),
+        "counts": counts,
+        "refreshed_age_seconds": age,
+        "stale": age is None or age > CACHE_MAX_AGE,
+    })
+
+
+# --------------------------------------------------------------------------
+# commands — download prompt images
+# --------------------------------------------------------------------------
+# Asset extensions we recognise from a URL path; anything else falls back to .jpg.
+DOWNLOAD_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".webm", ".mov"}
+DOWNLOAD_WORKERS = 6
+
+
+def asset_ext(url):
+    """Derive a file extension from an asset URL's path, defaulting to .jpg."""
+    path = url.split("?", 1)[0].split("#", 1)[0]
+    ext = os.path.splitext(path)[1].lower()
+    return ext if ext in DOWNLOAD_EXTS else ".jpg"
+
+
+def collect_prompt_ids(args):
+    """Gather prompt ids from positional args, --prompts-file and stdin.
+    Deduped, original order preserved."""
+    raw = list(args.ids or [])
+    if args.prompts_file:
+        if not Path(args.prompts_file).is_file():
+            die(f"file not found: {args.prompts_file}")
+        raw += Path(args.prompts_file).read_text().split()
+    if not raw and not sys.stdin.isatty():
+        raw += sys.stdin.read().split()
+    seen, ids = set(), []
+    for token in raw:
+        token = token.strip()
+        if token and token not in seen:
+            seen.add(token)
+            ids.append(token)
+    return ids
+
+
+def download_asset(url, dest):
+    """Fetch one asset URL to dest with curl. Raises AstriaError on failure."""
+    argv = ["curl", "-sSL", "--fail", "--max-time", "120", "-o", str(dest), url]
+    try:
+        proc = subprocess.run(argv, capture_output=True)
+    except FileNotFoundError:
+        die("`curl` not found on PATH — install curl")
+    if proc.returncode != 0:
+        raise AstriaError(proc.stderr.decode("utf-8", "replace").strip() or f"curl exit {proc.returncode}")
+
+
+def cmd_download(args, cfg):
+    ids = collect_prompt_ids(args)
+    if not ids:
+        die("no prompt ids — pass them as arguments, via --prompts-file, or on stdin")
+
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    results = {}
+
+    def worker(prompt_id):
+        entry = {"id": prompt_id, "images": 0, "saved": []}
+        try:
+            prompt = request(cfg, "GET", f"/prompts/{prompt_id}.json", workspace=args.workspace)
+        except AstriaError as exc:
+            entry["error"] = str(exc)
+            results[prompt_id] = entry
+            return
+        urls = (prompt or {}).get("images") or []
+        entry["images"] = len(urls)
+        if not urls:
+            entry["error"] = "no images yet"
+            results[prompt_id] = entry
+            return
+        width = max(2, len(str(len(urls))))
+        for idx, url in enumerate(urls):
+            dest = out_dir / f"prompt-{prompt_id}-{idx:0{width}d}{asset_ext(url)}"
+            try:
+                download_asset(url, dest)
+                entry["saved"].append(str(dest))
+            except AstriaError as exc:
+                entry.setdefault("errors", []).append(f"{url}: {exc}")
+        if "errors" in entry and not entry["saved"]:
+            entry["error"] = "; ".join(entry.pop("errors"))
+        results[prompt_id] = entry
+
+    pending = list(ids)
+    lock = threading.Lock()
+
+    def pump():
+        while True:
+            with lock:
+                if not pending:
+                    return
+                prompt_id = pending.pop(0)
+            worker(prompt_id)
+
+    threads = [threading.Thread(target=pump) for _ in range(min(DOWNLOAD_WORKERS, len(ids)))]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    prompts = [results[pid] for pid in ids]
+    emit({
+        "out": str(out_dir),
+        "prompts": prompts,
+        "totals": {
+            "prompts": len(prompts),
+            "downloaded": sum(len(p["saved"]) for p in prompts),
+            "failed": sum(1 for p in prompts if p.get("error")),
+        },
+    })
+
+
+# --------------------------------------------------------------------------
+# commands — raw API escape hatch
+# --------------------------------------------------------------------------
+def cmd_api(args, cfg):
+    form = [tuple(item.split("=", 1)) for item in args.form or [] if "=" in item]
+    query = [tuple(item.split("=", 1)) for item in args.query or [] if "=" in item]
+    json_body = json.loads(args.data) if args.data else None
+    result = request(cfg, args.method.upper(), args.path, query=query, form=form, json_body=json_body,
+                     workspace=args.workspace)
+    emit(result) if not isinstance(result, str) else sys.stdout.write(result + "\n")
+
+
+# --------------------------------------------------------------------------
+# hidden — SessionStart hook
+# --------------------------------------------------------------------------
+def cmd_session_hook(args, cfg):
+    # Best-effort: keep the /cli/models id cache warm (daily refresh).
+    try:
+        if models_cache_stale(load_models_cache(), cfg):
+            fetch_models(cfg)
+    except Exception:
+        pass
+    authed = bool(os.environ.get("ASTRIA_API_KEY") or os.environ.get("ASTRIA_AUTH_TOKEN") or cfg.get("api_key"))
+    out = {"hookSpecificOutput": {"hookEventName": "SessionStart"}}
+    if not authed:
+        out["hookSpecificOutput"]["additionalContext"] = (
+            "The Astria plugin is installed but not authenticated. If the user asks to do "
+            "anything with Astria (generate images, manage tunes/packs), tell them to run "
+            "`astria login` first (API key at astria.ai/users/edit/api)."
+        )
+    emit(out)
+
+
+# --------------------------------------------------------------------------
+# argument parser
+# --------------------------------------------------------------------------
+def build_parser():
+    parser = argparse.ArgumentParser(prog="astria", description="Astria API command-line client.")
+    parser.add_argument("--profile", metavar="NAME",
+                        help="config profile to use (also ASTRIA_PROFILE env); default: 'default'")
+    parser.add_argument("--version", action="version", version=f"astria {VERSION}")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # shared --workspace for API commands
+    ws_parent = argparse.ArgumentParser(add_help=False)
+    ws_parent.add_argument("-w", "--workspace", help="workspace id, 'all', or 'personal'")
+
+    # auth
+    p = sub.add_parser("login", help="store an API key in ~/.astria/config.json")
+    p.add_argument("--api-key", help="API key (else prompted / read from stdin)")
+    p.add_argument("--base-url", help="override API base URL")
+    p.add_argument("--workspace", help="default workspace id")
+    p.set_defaults(func=cmd_login)
+
+    sub.add_parser("logout", help="remove stored credentials").set_defaults(func=cmd_logout)
+    sub.add_parser("whoami", parents=[ws_parent], help="show the authenticated account").set_defaults(func=cmd_whoami)
+
+    p = sub.add_parser("config", help="show or change config")
+    p.add_argument("action", nargs="?", choices=["get", "set"], help="get (default) or set")
+    p.add_argument("key", nargs="?", help="config key for `set`")
+    p.add_argument("value", nargs="?", help="config value for `set`")
+    p.set_defaults(func=cmd_config)
+
+    p = sub.add_parser("models", help="list available image models (name -> tune id)")
+    p.add_argument("--refresh", action="store_true", help="force a refresh from the server")
+    p.set_defaults(func=cmd_models)
+
+    # tunes
+    tunes = sub.add_parser("tunes", help="references / fine-tuned models").add_subparsers(dest="sub", required=True)
+    p = tunes.add_parser("list", parents=[ws_parent], help="list tunes")
+    p.add_argument("--title", help="filter by title / product name / SKU substring")
+    p.add_argument("--name", action="append", help="filter by class name (repeatable)")
+    p.add_argument("--model-type", help="filter by model_type (e.g. faceid)")
+    p.add_argument("--gallery", action="store_true", help="query the public gallery instead")
+    p.add_argument("--limit")
+    p.add_argument("--offset")
+    p.set_defaults(func=cmd_tunes_list)
+    p = tunes.add_parser("get", parents=[ws_parent], help="get one tune")
+    p.add_argument("id")
+    p.set_defaults(func=cmd_tunes_get)
+    p = tunes.add_parser("create", parents=[ws_parent], help="create a tune / reference")
+    p.add_argument("--title", required=True)
+    p.add_argument("--name", required=True, help="subject class (man, woman, dress, shoes, pose, ...)")
+    p.add_argument("--model", default="gemini", help="base model (default: gemini)")
+    p.add_argument("--model-type", default="faceid")
+    p.add_argument("--description", help="short description (stored in characteristics)")
+    p.add_argument("--image-url", action="append", help="training image URL (repeatable)")
+    p.add_argument("--image", action="append", help="local training image file (repeatable)")
+    p.set_defaults(func=cmd_tunes_create)
+    p = tunes.add_parser("update", parents=[ws_parent], help="update a tune")
+    p.add_argument("id")
+    p.add_argument("--title")
+    p.add_argument("--name")
+    p.add_argument("--description")
+    p.set_defaults(func=cmd_tunes_update)
+
+    # prompts
+    prompts = sub.add_parser("prompts", help="image/video generation records").add_subparsers(dest="sub", required=True)
+    p = prompts.add_parser("list", parents=[ws_parent], help="list prompts")
+    p.add_argument("--tune-id", help="scope to one tune's prompts")
+    p.add_argument("--pack-id", help="template prompts owned by a pack")
+    p.add_argument("--base-pack-id", help="prompts generated from a pack")
+    p.add_argument("--user-id")
+    p.add_argument("--text", help="filter by prompt text substring")
+    p.add_argument("--limit")
+    p.add_argument("--offset")
+    p.set_defaults(func=cmd_prompts_list)
+    p = prompts.add_parser("get", parents=[ws_parent], help="get one prompt")
+    p.add_argument("id")
+    p.add_argument("--tune", help="tune id the prompt belongs to")
+    p.add_argument("--model", help="model name instead of --tune")
+    p.set_defaults(func=cmd_prompts_get)
+    p = prompts.add_parser("update", parents=[ws_parent], help="update a prompt (assign pack / move workspace)")
+    p.add_argument("id")
+    p.add_argument("--tune", help="tune id the prompt belongs to")
+    p.add_argument("--model", help="model name instead of --tune")
+    p.add_argument("--pack-id")
+    p.add_argument("--workspace-id")
+    p.set_defaults(func=cmd_prompts_update)
+
+    # generate
+    p = sub.add_parser("generate", parents=[ws_parent], help="generate images")
+    p.add_argument("--model", default=None, help="gemini (default), seedream, gpt-image-2, or a tune id")
+    p.add_argument("--text", required=True, help="prompt text; embed references as <faceid:ID:1>")
+    p.add_argument("--num-images")
+    p.add_argument("--aspect-ratio")
+    p.add_argument("--resolution", help="Gemini only: 1K / 2K / 4K")
+    p.add_argument("--input-image", help="URL or local file to edit")
+    p.add_argument("--pack-id", help="assign the new prompt to a pack")
+    p.add_argument("--wait", action="store_true", help="block until images are ready")
+    p.set_defaults(func=cmd_generate)
+
+    # video
+    p = sub.add_parser("video", parents=[ws_parent], help="generate video")
+    p.add_argument("--model", default="gemini", help="image-stage model (renders the first frame)")
+    p.add_argument("--text", required=True, help="first-frame prompt text")
+    p.add_argument("--video-model", required=True, help="e.g. seedance2_fast_720p, kling30_standard")
+    p.add_argument("--video-prompt", required=True, help="motion / action description")
+    p.add_argument("--duration", help="seconds (model-dependent)")
+    p.add_argument("--aspect-ratio")
+    p.add_argument("--resolution")
+    p.add_argument("--num-images")
+    p.add_argument("--input-image")
+    p.add_argument("--first-frame", help="URL or file overriding the rendered first frame")
+    p.add_argument("--last-frame", help="URL or file for keyframe models")
+    p.add_argument("--input-video", help="URL or file for motion-control models")
+    p.add_argument("--pack-id")
+    p.add_argument("--wait", action="store_true")
+    p.set_defaults(func=cmd_video)
+
+    # download — pull a prompt's rendered images/videos to a local directory
+    p = sub.add_parser("download", parents=[ws_parent],
+                       help="download the images/videos for one or more prompt ids")
+    p.add_argument("ids", nargs="*", help="prompt ids (also accepted via --prompts-file or stdin)")
+    p.add_argument("--out", default="./astria-downloads", help="target directory (created if missing)")
+    p.add_argument("--prompts-file", help="file of prompt ids (one per line or whitespace-separated)")
+    p.set_defaults(func=cmd_download)
+
+    # packs
+    packs = sub.add_parser("packs", help="prompt-template collections").add_subparsers(dest="sub", required=True)
+    p = packs.add_parser("list", parents=[ws_parent], help="list packs")
+    p.add_argument("--limit")
+    p.add_argument("--offset")
+    p.set_defaults(func=cmd_packs_list)
+    p = packs.add_parser("create", parents=[ws_parent], help="create a pack")
+    p.add_argument("--title", required=True)
+    p.add_argument("--subtitle")
+    p.add_argument("--model", default="gemini")
+    p.add_argument("--model-type", default="faceid")
+    p.set_defaults(func=cmd_packs_create)
+
+    # workspaces
+    workspaces = sub.add_parser("workspaces", help="workspaces").add_subparsers(dest="sub", required=True)
+    workspaces.add_parser("list", help="list workspaces").set_defaults(func=cmd_workspaces_list)
+
+    # landing page
+    landing = sub.add_parser("landing", help="workspace landing page").add_subparsers(dest="sub", required=True)
+    p = landing.add_parser("get", parents=[ws_parent], help="fetch the workspace JSON (incl. landing_page_html)")
+    p.add_argument("--html", action="store_true", help="print only landing_page_html (raw)")
+    p.set_defaults(func=cmd_landing_get)
+    p = landing.add_parser("set", parents=[ws_parent], help="update the landing page")
+    p.add_argument("--html-file", help="path to the edited inner-body HTML")
+    p.add_argument("--brief", help="regenerate the whole page from this brief (Gemini)")
+    p.set_defaults(func=cmd_landing_set)
+
+    # cache — local snapshot (JSON + SQLite) of tunes/prompts/packs/user.
+    # Query subcommands (get/find/uses/stats) read ONLY the local DB, never the API.
+    cache = sub.add_parser("cache", parents=[ws_parent],
+                           help="local snapshot + query layer for tunes/prompts/packs")
+    cache_sub = cache.add_subparsers(dest="action")
+    cache.set_defaults(action="refresh", resource=None, force=False, func=cmd_cache)
+
+    p = cache_sub.add_parser("refresh", parents=[ws_parent],
+                             help="pull tunes/prompts/packs/user into JSON + SQLite")
+    p.add_argument("resource", nargs="?", choices=list(CACHE_FIELDS), help="refresh only one resource")
+    p.add_argument("--force", action="store_true", help="refresh even if the cache is fresh")
+    p.set_defaults(func=cmd_cache)
+
+    p = cache_sub.add_parser("path", parents=[ws_parent], help="print the cache directory")
+    p.set_defaults(func=cmd_cache, resource=None, force=False)
+
+    p = cache_sub.add_parser("get", parents=[ws_parent], help="get one cached record by id (local DB)")
+    p.add_argument("table", choices=list(DB_COLUMNS), help="tunes / prompts / packs")
+    p.add_argument("id", help="record id")
+    p.set_defaults(func=cmd_cache, resource=None, force=False)
+
+    p = cache_sub.add_parser("find", parents=[ws_parent], help="filter cached records (local DB)")
+    find_sub = p.add_subparsers(dest="table", required=True)
+    f = find_sub.add_parser("tunes", parents=[ws_parent], help="find tunes by name / title substring")
+    f.add_argument("--name", help="class-name substring filter")
+    f.add_argument("--title", help="title substring filter")
+    f.set_defaults(func=cmd_cache, action="find", resource=None, force=False)
+    f = find_sub.add_parser("prompts", parents=[ws_parent], help="find prompts by pack / tune / text")
+    f.add_argument("--pack-id", dest="pack_id", help="exact pack id")
+    f.add_argument("--tune-id", dest="tune_id", help="exact tune id")
+    f.add_argument("--text", help="prompt text substring filter")
+    f.set_defaults(func=cmd_cache, action="find", resource=None, force=False)
+    f = find_sub.add_parser("packs", parents=[ws_parent], help="find packs by main-class / title")
+    f.add_argument("--main-class", dest="main_class", help="main_class_name substring filter")
+    f.add_argument("--title", help="title substring filter")
+    f.set_defaults(func=cmd_cache, action="find", resource=None, force=False)
+
+    p = cache_sub.add_parser("uses", parents=[ws_parent],
+                             help="prompts whose text references a tune id (<faceid:ID:..>)")
+    p.add_argument("tune_id", help="tune id to cross-reference")
+    p.set_defaults(func=cmd_cache, resource=None, force=False)
+
+    p = cache_sub.add_parser("stats", parents=[ws_parent], help="row counts per table + cache age")
+    p.set_defaults(func=cmd_cache, resource=None, force=False)
+
+    # raw api
+    p = sub.add_parser("api", parents=[ws_parent], help="raw API call (escape hatch)")
+    p.add_argument("method", help="GET / POST / PATCH / DELETE")
+    p.add_argument("path", help="API path, e.g. /tunes?limit=5")
+    p.add_argument("--query", action="append", help="query param k=v (repeatable)")
+    p.add_argument("--form", action="append", help="multipart field k=v (repeatable; v may be @file)")
+    p.add_argument("--data", help="raw JSON request body")
+    p.set_defaults(func=cmd_api)
+
+    # hidden hook
+    p = sub.add_parser("_session-hook")
+    p.set_defaults(func=cmd_session_hook)
+
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
+    apply_profile(resolve_profile(args.profile))
+    cfg = load_config()
+    check_cli_version(load_models_cache())
+    try:
+        args.func(args, cfg)
+    except AstriaError as exc:
+        die(str(exc))
+    except BrokenPipeError:
+        sys.exit(0)
+    except KeyboardInterrupt:
+        die("interrupted", code=130)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,26 @@
+{
+  "name": "astria",
+  "owner": {
+    "name": "Astria",
+    "url": "https://www.astria.ai"
+  },
+  "metadata": {
+    "description": "Skills and a CLI for the Astria API — AI image & video generation, fine-tuning, prompt writing and packs.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "astria",
+      "source": "./plugins/astria",
+      "description": "Generate images and video, manage references (tunes) and packs, and write prompts with the Astria API. Bundles the `astria` CLI so no environment variables are needed — run `astria login` once.",
+      "version": "1.0.0",
+      "category": "creative",
+      "author": {
+        "name": "Astria",
+        "url": "https://www.astria.ai"
+      },
+      "homepage": "https://www.astria.ai",
+      "tags": ["image-generation", "video", "ai", "fine-tuning", "fashion", "headshots"]
+    }
+  ]
+}

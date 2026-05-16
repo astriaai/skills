@@ -1,5 +1,7 @@
 ---
+name: unique-headshot
 description: Use when generating unique AI headshot/model faces without a reference tune. Creates diverse, realistic casting-style headshots with detailed facial trait descriptions.
+allowed-tools: Bash(astria:*)
 ---
 
 # Unique Headshot Generator
@@ -97,9 +99,9 @@ Vary lighting for natural diversity:
 
 ## Generation Rules
 
-1. **No reference tunes** — these prompts generate entirely new faces
-2. **Always use $GEMINI_TUNE_ID** as the model
-3. **Default parameters**: num_images=2, resolution="2K", aspect_ratio="1:1"
+1. **No reference tunes** — these prompts generate entirely new faces (no `<faceid:...>` tokens)
+2. **Always generate with the gemini model**: `astria generate --model gemini --text "..."`
+3. **Default parameters**: `--num-images 2 --resolution 2K --aspect-ratio 1:1`
 4. **Never repeat the same ethnicity/heritage** in a batch
 5. **Every prompt must have at least one unique distinguishing feature** (scar, dimple, beauty mark, asymmetry, etc.)
 6. **Hair is always pulled back** — no hair framing or covering the face

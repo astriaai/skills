@@ -1,0 +1,15 @@
+{
+  "name": "astria",
+  "description": "Generate images and video, manage references (tunes) and packs, and write prompts with the Astria API. Bundles the `astria` CLI so no environment variables are needed — run `astria login` once.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Astria",
+    "url": "https://www.astria.ai"
+  },
+  "homepage": "https://www.astria.ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/astriaai/astria-claude-skills.git"
+  },
+  "license": "MIT"
+}
