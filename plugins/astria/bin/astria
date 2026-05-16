@@ -524,6 +524,8 @@ def _generate(args, cfg, video):
     form = [field("prompt[text]", args.text)]
     if args.num_images:
         form.append(field("prompt[num_images]", args.num_images))
+    if getattr(args, "seed", None):
+        form.append(field("prompt[seed]", args.seed))
     if args.aspect_ratio:
         form.append(field("prompt[aspect_ratio]", args.aspect_ratio))
     if getattr(args, "resolution", None):
@@ -1075,6 +1077,7 @@ def build_parser():
     p.add_argument("--model", default=None, help="gemini (default), seedream, gpt-image-2, or a tune id")
     p.add_argument("--text", required=True, help="prompt text; embed references as <faceid:ID:1>")
     p.add_argument("--num-images")
+    p.add_argument("--seed", help="generation seed; also makes an otherwise-identical prompt distinct")
     p.add_argument("--aspect-ratio")
     p.add_argument("--resolution", help="Gemini only: 1K / 2K / 4K")
     p.add_argument("--input-image", help="URL or local file to edit")

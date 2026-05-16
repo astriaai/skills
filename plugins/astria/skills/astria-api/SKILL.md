@@ -117,6 +117,10 @@ astria generate --text "..." --pack-id 88 --wait     # assign to pack, block unt
 - `--wait` polls until the images are ready and prints the finished prompt JSON.
   Without it, the command returns immediately — images render asynchronously.
 - `aspect_ratio` values: `1:1 16:9 9:16 21:9 9:21 3:2 2:3 5:4 4:5 4:3`.
+- `--seed` sets the generation seed. Astria dedups prompts by `(text, seed)`
+  within a tune, so the same prompt text reused on different input images
+  collapses onto one prompt — pass a distinct `--seed` per call to keep them
+  separate without altering the prompt text.
 
 ## Generate video
 
