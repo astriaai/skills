@@ -1,4 +1,4 @@
-# Astria Claude Code Plugin
+# Astria AI Skills
 
 Skills and a CLI for the [Astria](https://www.astria.ai) API — AI image & video
 generation, fine-tuning (tunes / references), prompt writing, and automated
