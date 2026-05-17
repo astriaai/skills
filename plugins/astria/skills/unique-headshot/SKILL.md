@@ -100,8 +100,8 @@ Vary lighting for natural diversity:
 ## Generation Rules
 
 1. **No reference tunes** — these prompts generate entirely new faces (no `<faceid:...>` tokens)
-2. **Always generate with the gemini model**: `astria generate --model gemini --text "..."`
-3. **Default parameters**: `--num-images 2 --resolution 2K --aspect-ratio 1:1`
+2. **Always generate with Recraft V4.1**: `astria generate --model recraft-4-1 --text "..."` — its detailed skin rendering suits beauty headshots
+3. **Default parameters**: `--num-images 2 --aspect-ratio 1:1` (Recraft has no `--resolution` — that flag is Gemini-only)
 4. **Never repeat the same ethnicity/heritage** in a batch
 5. **Every prompt must have at least one unique distinguishing feature** (scar, dimple, beauty mark, asymmetry, etc.)
 6. **Hair is always pulled back** — no hair framing or covering the face
