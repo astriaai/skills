@@ -62,14 +62,19 @@ Add `-w/--workspace` to any command:
 
 ## Models
 
-`--model` accepts a name or a raw tune id:
-- `gemini` *(default)* — Nano-Banana Pro. Best quality. Supports `--resolution` (1K/2K/4K) and `--aspect-ratio`.
-- `seedream` — Seedream 4.5. Fast and cheaper. No `<1>` token, no resolution.
-- `gpt-image-2` — GPT Image 2.
+`--model` accepts a model name or a raw tune id. **Don't hardcode model
+names — discover the current catalog at runtime:**
 
-`astria models` lists the current model → tune-id mapping — fetched from the
-Astria server and cached for a day, so the ids never go stale. `astria models
---refresh` forces an update.
+```bash
+astria models              # each model's name, title, tune id and supported resolutions
+astria models --refresh    # force-refresh (otherwise cached for a day)
+```
+
+The catalog is fetched from the Astria server, so it stays current as models
+are added or retired and the tune ids never go stale. The output marks the
+`default` model (used when `--model` is omitted) and lists each model's
+supported `--resolution` values — a model with no resolutions listed doesn't
+accept `--resolution`.
 
 ---
 
@@ -99,15 +104,15 @@ astria prompts list                            # recent prompts
 astria prompts list --pack-id 88               # a pack's template prompts
 astria prompts list --tune-id 123              # prompts for one tune
 astria prompts list --text "white background" --limit 100 --offset 0
-astria prompts get 555 --model gemini          # one prompt (needs its tune/model)
-astria prompts update 555 --model gemini --pack-id 88   # assign a prompt to a pack
+astria prompts get 555 --model nano-banana-pro       # one prompt (needs its tune/model)
+astria prompts update 555 --model nano-banana-pro --pack-id 88   # assign a prompt to a pack
 ```
 
 ## Generate images
 
 ```bash
 astria generate --text "<faceid:123:1> woman, clean white studio background"
-astria generate --model gemini --text "..." --num-images 4 --aspect-ratio 3:4 --resolution 2K
+astria generate --model nano-banana-pro --text "..." --num-images 4 --aspect-ratio 3:4 --resolution 2K
 astria generate --model seedream --text "product photo of headphones on marble" --num-images 2
 astria generate --text "recreate this in 4K" --input-image https://example.com/photo.jpg
 astria generate --text "..." --pack-id 88 --wait     # assign to pack, block until ready
@@ -132,7 +137,7 @@ astria video --text "a model walking on a runway" \
   --video-model seedance2_fast_720p --video-prompt "camera tracks alongside her" \
   --duration 5 --aspect-ratio 16:9 --wait
 
-astria video --text "zwx man <faceid:123:1>" \
+astria video --text "zwx man <faceid:123:1> in a dance arena" \
   --video-model kling30_motion_control_pro --video-prompt "match the dance moves" \
   --duration 10 --input-video ./reference.mp4
 ```
@@ -205,7 +210,7 @@ Packs are surfaced in the Astria GUI as **Templates** — "pack" and "template" 
 ```bash
 astria packs list
 astria packs create --title "Spring Lookbook"
-astria prompts update 555 --model gemini --pack-id 88   # add a prompt to the pack
+astria prompts update 555 --model nano-banana-pro --pack-id 88   # add a prompt to the pack
 ```
 
 ## Workspaces & landing pages
