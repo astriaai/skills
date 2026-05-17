@@ -13,13 +13,14 @@
 #   scripts/link-skills.sh
 set -eu
 
-SKILLS_SRC="$(cd "$(dirname "$0")/.." && pwd)/plugins/astria/skills"
+SKILLS_SRC="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$HOME/.claude/skills"
 
 mkdir -p "$DEST"
 
-# Link every skill directory.
+# Link every skill directory (any top-level dir holding a SKILL.md).
 for dir in "$SKILLS_SRC"/*/; do
+  [ -f "$dir/SKILL.md" ] || continue
   name="$(basename "$dir")"
   link="$DEST/$name"
   if [ -e "$link" ] && [ ! -L "$link" ]; then

@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "astria",
-      "source": "./plugins/astria",
+      "source": "./",
       "description": "Generate images and video, manage references (tunes) and packs, and write prompts with the Astria API. Bundles the `astria` CLI so no environment variables are needed — run `astria login` once.",
       "version": "1.0.0",
       "category": "creative",
@@ -20,7 +20,18 @@
         "url": "https://www.astria.ai"
       },
       "homepage": "https://www.astria.ai",
-      "tags": ["image-generation", "video", "ai", "fine-tuning", "fashion", "headshots"]
+      "tags": ["image-generation", "video", "ai", "fine-tuning", "fashion", "headshots"],
+      "skills": [
+        { "name": "astria-api", "path": "astria-api", "invoke": "/astria:astria-api" },
+        { "name": "prompt-writing", "path": "prompt-writing", "invoke": "/astria:prompt-writing" },
+        { "name": "packs-guide", "path": "packs-guide", "invoke": "/astria:packs-guide" },
+        { "name": "unique-headshot", "path": "unique-headshot", "invoke": "/astria:unique-headshot" },
+        { "name": "navigation", "path": "navigation", "invoke": "/astria:navigation" },
+        { "name": "landing-page-editor", "path": "landing-page-editor", "invoke": "/astria:landing-page-editor" },
+        { "name": "templatize-page", "path": "templatize-page", "invoke": "/astria:templatize-page" },
+        { "name": "instagram-movie-producer", "path": "instagram-movie-producer", "invoke": "/astria:instagram-movie-producer" },
+        { "name": "artboard", "path": "artboard", "invoke": "/astria:artboard" }
+      ]
     }
   ]
 }

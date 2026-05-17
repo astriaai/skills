@@ -6,10 +6,17 @@ photoshoot packs — packaged as a Claude Code plugin.
 
 ## Install
 
-In Claude Code:
+The quickest way — cross-agent, works in Claude Code, Cursor, and other
+agents:
+
+```bash
+npx skills add astriaai/skills
+```
+
+Or, inside Claude Code, install via the plugin marketplace:
 
 ```
-/plugin marketplace add astriaai/astria-claude-skills
+/plugin marketplace add astriaai/skills
 /plugin install astria@astria
 ```
 

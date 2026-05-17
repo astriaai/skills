@@ -8,7 +8,7 @@
 set -eu
 
 REF="${1:-main}"
-DEST="$(cd "$(dirname "$0")/.." && pwd)/plugins/astria/bin/astria"
+DEST="$(cd "$(dirname "$0")/.." && pwd)/bin/astria"
 URL="https://raw.githubusercontent.com/astriaai/cli/$REF/astria"
 
 curl -fsSL "$URL" -o "$DEST"
