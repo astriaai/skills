@@ -15,6 +15,14 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
+try:
+    # Optional: a browser-fingerprinted HTTP client. When installed (the Astria
+    # web-chat sandbox bundles it) fetch() uses it to get past TLS-fingerprint
+    # bot blocking. Marketplace installs without it fall back to urllib.
+    from curl_cffi import requests as cffi_requests
+except ImportError:
+    cffi_requests = None
+
 
 CHROME_PATH_HINTS = (
     "/icons/", "/icon/", "/logo", "/logos/", "/sprite", "/favicon",
@@ -117,6 +125,10 @@ def _too_small(width, height):
 
 
 def fetch(url):
+    if cffi_requests is not None:
+        response = cffi_requests.get(url, impersonate="chrome", timeout=20)
+        response.raise_for_status()
+        return response.url, response.text
     request = Request(url, headers={
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
                       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
