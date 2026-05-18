@@ -630,13 +630,18 @@ def cmd_landing_set(args, cfg):
     ws = resolve_workspace(cfg, args.workspace)
     if not ws:
         die("a workspace is required — pass --workspace or set WORKSPACE_ID")
+    # Send as a JSON body, not a multipart field. A multipart `@file` part is
+    # parsed server-side as an ActionDispatch::Http::UploadedFile, and assigning
+    # that to the string column stores its literal inspect string instead of the
+    # HTML. JSON keeps landing_page_html unambiguously a string.
     if args.brief:
-        form = [field("workspace[brief]", args.brief)]
+        workspace = {"brief": args.brief}
     else:
         if not Path(args.html_file).is_file():
             die(f"file not found: {args.html_file}")
-        form = [field("workspace[landing_page_html]", f"@{args.html_file}")]
-    emit(request(cfg, "PATCH", f"/workspaces/{ws}.json", form=form, workspace=ws))
+        workspace = {"landing_page_html": Path(args.html_file).read_text(encoding="utf-8")}
+    emit(request(cfg, "PATCH", f"/workspaces/{ws}.json",
+                 json_body={"workspace": workspace}, workspace=ws))
 
 
 # --------------------------------------------------------------------------
