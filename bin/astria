@@ -99,6 +99,18 @@ def resolve_profile(cli_value):
     return profile
 
 
+def argv_profile():
+    """Peek at --profile in argv before the parser exists, so build_parser()
+    can read the right profile's models cache for the --help enum text."""
+    argv = sys.argv[1:]
+    for i, token in enumerate(argv):
+        if token == "--profile":
+            return argv[i + 1] if i + 1 < len(argv) else None
+        if token.startswith("--profile="):
+            return token.split("=", 1)[1]
+    return None
+
+
 def apply_profile(profile):
     """Point CONFIG_PATH / MODELS_CACHE at this profile's files. The 'default'
     profile keeps the original config.json / models.json names; a named profile
@@ -173,7 +185,9 @@ def fetch_models(cfg):
         "fetched_at": int(time.time()),
         "ttl": payload.get("cache_ttl") or MODELS_TTL_DEFAULT,
         "default": payload.get("default", "gemini"),
+        "default_video_model": payload.get("default_video_model"),
         "models": payload["models"],
+        "video_models": payload.get("video_models") or {},
         "cli": payload.get("cli") or {},
     }
     try:
@@ -418,8 +432,10 @@ def cmd_models(args, cfg):
         die("could not refresh models from the server")
     emit({
         "default": record.get("default", "gemini"),
+        "default_video_model": record.get("default_video_model"),
         "source": "built-in (offline)" if record.get("builtin") else "server",
         "models": record.get("models", {}),
+        "video_models": record.get("video_models", {}),
     })
 
 
@@ -485,10 +501,13 @@ def cmd_tunes_update(args, cfg):
 # --------------------------------------------------------------------------
 def cmd_prompts_list(args, cfg):
     query = []
-    for key in ("text", "pack_id", "base_pack_id", "tune_id", "user_id"):
+    for key in ("text", "pack_id", "base_pack_id", "tune_id", "user_id", "orig_prompt_id"):
         value = getattr(args, key, None)
         if value:
             query.append((key, value))
+    for flag in ("liked", "today", "is_video", "is_api"):
+        if getattr(args, flag, False):
+            query.append((flag, "true"))
     if args.limit:
         query.append(("limit", args.limit))
     if args.offset:
@@ -988,7 +1007,39 @@ def cmd_session_hook(args, cfg):
 # --------------------------------------------------------------------------
 # argument parser
 # --------------------------------------------------------------------------
+# --help enum text is built from the cached /cli/models record so usage
+# strings track the live catalog — never hardcode model names or resolutions.
+def image_model_help(rec, prefix="model name or tune id"):
+    models = rec.get("models") or {}
+    if not models:
+        return f"{prefix}; see 'astria models', omit for the platform default"
+    names = ", ".join(
+        f"{name} (default)" if meta.get("default") or name == rec.get("default") else name
+        for name, meta in models.items())
+    return f"{prefix} — {names}; omit for the default"
+
+
+def resolution_help(rec):
+    res = sorted({r for meta in (rec.get("models") or {}).values()
+                  for r in (meta.get("resolutions") or [])})
+    if not res:
+        return "output resolution; see 'astria models' for per-model supported values"
+    return ("output resolution, model-dependent — " + ", ".join(res)
+            + "; see 'astria models' for each model's set")
+
+
+def video_model_help(rec):
+    video_models = rec.get("video_models") or {}
+    if not video_models:
+        return "video model name; see 'astria models' for the list"
+    default = rec.get("default_video_model")
+    names = ", ".join(f"{name} (default)" if name == default else name
+                      for name in video_models)
+    return "video model — " + names
+
+
 def build_parser():
+    models_record = load_models_cache() or {}
     parser = argparse.ArgumentParser(prog="astria", description="Astria API command-line client.")
     parser.add_argument("--profile", metavar="NAME",
                         help="config profile to use (also ASTRIA_PROFILE env); default: 'default'")
@@ -1015,7 +1066,7 @@ def build_parser():
     p.add_argument("value", nargs="?", help="config value for `set`")
     p.set_defaults(func=cmd_config)
 
-    p = sub.add_parser("models", help="list available image models (name -> tune id)")
+    p = sub.add_parser("models", help="list available image + video models (name -> tune id)")
     p.add_argument("--refresh", action="store_true", help="force a refresh from the server")
     p.set_defaults(func=cmd_models)
 
@@ -1055,7 +1106,12 @@ def build_parser():
     p.add_argument("--pack-id", help="template prompts owned by a pack")
     p.add_argument("--base-pack-id", help="prompts generated from a pack")
     p.add_argument("--user-id")
+    p.add_argument("--orig-prompt-id", help="prompts cloned from this prompt id")
     p.add_argument("--text", help="filter by prompt text substring")
+    p.add_argument("--liked", action="store_true", help="only prompts that have likes")
+    p.add_argument("--today", action="store_true", help="only prompts created today")
+    p.add_argument("--is-video", action="store_true", help="only video prompts")
+    p.add_argument("--is-api", action="store_true", help="only prompts created via the API")
     p.add_argument("--limit")
     p.add_argument("--offset")
     p.set_defaults(func=cmd_prompts_list)
@@ -1074,12 +1130,12 @@ def build_parser():
 
     # generate
     p = sub.add_parser("generate", parents=[ws_parent], help="generate images")
-    p.add_argument("--model", default=None, help="gemini (default), seedream, gpt-image-2, or a tune id")
+    p.add_argument("--model", default=None, help=image_model_help(models_record))
     p.add_argument("--text", required=True, help="prompt text; embed references as <faceid:ID:1>")
     p.add_argument("--num-images")
     p.add_argument("--seed", help="generation seed; also makes an otherwise-identical prompt distinct")
     p.add_argument("--aspect-ratio")
-    p.add_argument("--resolution", help="Gemini only: 1K / 2K / 4K")
+    p.add_argument("--resolution", help=resolution_help(models_record))
     p.add_argument("--input-image", help="URL or local file to edit")
     p.add_argument("--pack-id", help="assign the new prompt to a pack")
     p.add_argument("--wait", action="store_true", help="block until images are ready")
@@ -1087,13 +1143,13 @@ def build_parser():
 
     # video
     p = sub.add_parser("video", parents=[ws_parent], help="generate video")
-    p.add_argument("--model", default="gemini", help="image-stage model (renders the first frame)")
+    p.add_argument("--model", default=None, help=image_model_help(models_record, "first-frame image model"))
     p.add_argument("--text", required=True, help="first-frame prompt text")
-    p.add_argument("--video-model", required=True, help="e.g. seedance2_fast_720p, kling30_standard")
+    p.add_argument("--video-model", required=True, help=video_model_help(models_record))
     p.add_argument("--video-prompt", required=True, help="motion / action description")
     p.add_argument("--duration", help="seconds (model-dependent)")
     p.add_argument("--aspect-ratio")
-    p.add_argument("--resolution")
+    p.add_argument("--resolution", help=resolution_help(models_record))
     p.add_argument("--num-images")
     p.add_argument("--input-image")
     p.add_argument("--first-frame", help="URL or file overriding the rendered first frame")
@@ -1120,7 +1176,7 @@ def build_parser():
     p = packs.add_parser("create", parents=[ws_parent], help="create a pack")
     p.add_argument("--title", required=True)
     p.add_argument("--subtitle")
-    p.add_argument("--model", default="gemini")
+    p.add_argument("--model", default=None, help=image_model_help(models_record, "base model for the pack"))
     p.add_argument("--model-type", default="faceid")
     p.set_defaults(func=cmd_packs_create)
 
@@ -1200,6 +1256,10 @@ def build_parser():
 
 
 def main():
+    # Resolve the profile up front so build_parser() reads that profile's
+    # cached model catalog for the --help enum text; re-resolve from the
+    # parsed args afterwards so the flag stays authoritative.
+    apply_profile(resolve_profile(argv_profile()))
     args = build_parser().parse_args()
     apply_profile(resolve_profile(args.profile))
     cfg = load_config()

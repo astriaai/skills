@@ -66,7 +66,7 @@ Add `-w/--workspace` to any command:
 names — discover the current catalog at runtime:**
 
 ```bash
-astria models              # each model's name, title, tune id and supported resolutions
+astria models              # image + video models — name, title, tune id, resolutions
 astria models --refresh    # force-refresh (otherwise cached for a day)
 ```
 
@@ -74,7 +74,11 @@ The catalog is fetched from the Astria server, so it stays current as models
 are added or retired and the tune ids never go stale. The output marks the
 `default` model (used when `--model` is omitted) and lists each model's
 supported `--resolution` values — a model with no resolutions listed doesn't
-accept `--resolution`.
+accept `--resolution`. It also lists the `video_models` catalog and the
+`default_video_model` used by `astria video`.
+
+`astria generate` / `astria video` `--help` print the current model,
+resolution and video-model names inline — they read the same cached catalog.
 
 ---
 
@@ -103,10 +107,16 @@ sandals, pose, …). `--model-type` defaults to `faceid`.
 astria prompts list                            # recent prompts
 astria prompts list --pack-id 88               # a pack's template prompts
 astria prompts list --tune-id 123              # prompts for one tune
+astria prompts list --liked --is-video         # liked video prompts
+astria prompts list --today --limit 100        # prompts created today
 astria prompts list --text "white background" --limit 100 --offset 0
 astria prompts get 555 --model nano-banana-pro       # one prompt (needs its tune/model)
 astria prompts update 555 --model nano-banana-pro --pack-id 88   # assign a prompt to a pack
 ```
+
+- `prompts list` filters: `--pack-id`, `--base-pack-id`, `--tune-id`,
+  `--user-id`, `--orig-prompt-id`, `--text`, and the flags `--liked`,
+  `--today`, `--is-video`, `--is-api`.
 
 ## Generate images
 
