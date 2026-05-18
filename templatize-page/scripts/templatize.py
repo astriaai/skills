@@ -17,7 +17,9 @@ Two variants, selected with --mode:
     chose to swap, plain text for the parts they did not.
 
 Both variants create one pack named after --pack-title and assign every
-prompt to it.
+prompt to it. Each pack prompt is rendered at the closest standard aspect
+ratio to its source image, so the generated look keeps the original framing;
+--aspect-ratio overrides the detection for the whole run.
 
 Every API call goes through the bundled `astria` CLI, which handles auth and
 workspace scoping. No environment variables and no extra Python packages
@@ -26,8 +28,10 @@ needed — only the standard library.
 import argparse
 import hashlib
 import json
+import struct
 import subprocess
 import sys
+import urllib.request
 
 BAREFOOT_EDIT_TEXT = (
     "Remove the subject's shoes so they are barefoot. Keep everything else "
@@ -44,9 +48,110 @@ SHOE_PROMPT_TEMPLATE = (
 )
 POSE_PLACEHOLDER = "{pose}"
 
+# Aspect ratios the Gemini image model accepts. Each source image's true ratio
+# is snapped to the nearest of these so the generated pack prompt renders at
+# the original framing instead of Gemini's square default.
+ASPECT_RATIOS = {
+    "21:9": 21 / 9, "16:9": 16 / 9, "3:2": 3 / 2, "4:3": 4 / 3, "5:4": 5 / 4,
+    "1:1": 1.0,
+    "4:5": 4 / 5, "3:4": 3 / 4, "2:3": 2 / 3, "9:16": 9 / 16,
+}
+# Fallback when a source image can't be fetched or its format isn't readable —
+# fashion lookbook shots are overwhelmingly portrait.
+DEFAULT_ASPECT_RATIO = "3:4"
+BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+)
+MAX_HEADER_BYTES = 512 * 1024  # enough to reach the dimensions of any web image
+
 
 def log(msg):
     print(msg, file=sys.stderr, flush=True)
+
+
+def image_dimensions(data):
+    """Return (width, height) parsed from raw image bytes, or None if the
+    format isn't one we can read (PNG, GIF, JPEG, WebP)."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n" and len(data) >= 24:
+        width, height = struct.unpack(">II", data[16:24])
+        return width, height
+    if data[:6] in (b"GIF87a", b"GIF89a") and len(data) >= 10:
+        width, height = struct.unpack("<HH", data[6:10])
+        return width, height
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return _webp_dimensions(data)
+    if data[:2] == b"\xff\xd8":
+        return _jpeg_dimensions(data)
+    return None
+
+
+def _webp_dimensions(data):
+    fourcc = data[12:16]
+    if fourcc == b"VP8X" and len(data) >= 30:           # extended format
+        width = (data[24] | data[25] << 8 | data[26] << 16) + 1
+        height = (data[27] | data[28] << 8 | data[29] << 16) + 1
+        return width, height
+    if fourcc == b"VP8L" and len(data) >= 25:           # lossless
+        bits = struct.unpack("<I", data[21:25])[0]
+        return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+    if fourcc == b"VP8 " and len(data) >= 30:           # lossy
+        width = struct.unpack("<H", data[26:28])[0] & 0x3FFF
+        height = struct.unpack("<H", data[28:30])[0] & 0x3FFF
+        return width, height
+    return None
+
+
+def _jpeg_dimensions(data):
+    """Walk JPEG segment markers to the start-of-frame, which carries the size."""
+    i, n = 2, len(data)
+    while i + 4 <= n:
+        if data[i] != 0xFF:
+            i += 1
+            continue
+        marker = data[i + 1]
+        if marker in (0x00, 0xFF):                      # stuffing / fill bytes
+            i += 1
+            continue
+        if marker == 0x01 or 0xD0 <= marker <= 0xD9:    # standalone, no payload
+            i += 2
+            continue
+        if marker == 0xDA:                              # start of scan — no header past here
+            break
+        seg_len = struct.unpack(">H", data[i + 2:i + 4])[0]
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):  # SOFn
+            if i + 9 <= n:
+                height, width = struct.unpack(">HH", data[i + 5:i + 9])
+                return width, height
+            return None
+        i += 2 + seg_len
+    return None
+
+
+def closest_aspect_ratio(width, height):
+    ratio = width / height
+    return min(ASPECT_RATIOS, key=lambda name: abs(ASPECT_RATIOS[name] - ratio))
+
+
+def detect_aspect_ratio(image_url):
+    """Snap a source image's real aspect ratio to the closest value Gemini
+    accepts. Falls back to DEFAULT_ASPECT_RATIO when the image can't be fetched
+    or its format isn't recognized."""
+    try:
+        request = urllib.request.Request(image_url, headers={"User-Agent": BROWSER_UA})
+        with urllib.request.urlopen(request, timeout=20) as response:
+            data = response.read(MAX_HEADER_BYTES)
+    except Exception as exc:                            # network / HTTP failure
+        log(f"aspect     {image_url}: fetch failed ({exc}) — using {DEFAULT_ASPECT_RATIO}")
+        return DEFAULT_ASPECT_RATIO
+    dims = image_dimensions(data)
+    if not dims or dims[0] <= 0 or dims[1] <= 0:
+        log(f"aspect     {image_url}: dimensions unreadable — using {DEFAULT_ASPECT_RATIO}")
+        return DEFAULT_ASPECT_RATIO
+    width, height = dims
+    aspect = closest_aspect_ratio(width, height)
+    log(f"aspect     {image_url}: {width}x{height} -> {aspect}")
+    return aspect
 
 
 class Astria:
@@ -114,14 +219,15 @@ def create_pose_tune(astria, edited_image_url, pack_title, index):
     return tune
 
 
-def create_pack_prompt(astria, text, pack_id):
+def create_pack_prompt(astria, text, pack_id, aspect_ratio):
     """Create a pack template prompt — stored on the pack, not rendered here."""
     prompt = astria.run(
         "generate", "--model", "gemini", "--text", text,
         "--num-images", "1", "--resolution", "2K",
+        "--aspect-ratio", aspect_ratio,
         "--pack-id", str(pack_id),
     )
-    log(f"prompt     id={prompt['id']}  pack_id={pack_id}")
+    log(f"prompt     id={prompt['id']}  pack_id={pack_id}  aspect_ratio={aspect_ratio}")
     return prompt
 
 
@@ -131,10 +237,11 @@ def run_shoes(astria, args):
     results = []
     for index, image_url in enumerate(args.pose_image_urls, start=1):
         log(f"--- image {index}/{len(args.pose_image_urls)}: {image_url}")
+        aspect_ratio = args.aspect_ratio or detect_aspect_ratio(image_url)
         edited_url = subject_edit(astria, image_url, BAREFOOT_EDIT_TEXT)
         pose_tune = create_pose_tune(astria, edited_url, args.pack_title, index)
         text = SHOE_PROMPT_TEMPLATE.format(pose_tune_id=pose_tune["id"], shoe_tune_id=shoe["id"])
-        prompt = create_pack_prompt(astria, text, pack["id"])
+        prompt = create_pack_prompt(astria, text, pack["id"], aspect_ratio)
         results.append((prompt["id"], pose_tune["id"]))
     return pack, results
 
@@ -160,10 +267,11 @@ def run_silhouette(astria, args):
     results = []
     for index, item in enumerate(spec, start=1):
         log(f"--- image {index}/{len(spec)}: {item['url']}")
+        aspect_ratio = args.aspect_ratio or detect_aspect_ratio(item["url"])
         edited_url = subject_edit(astria, item["url"], SILHOUETTE_EDIT_TEXT)
         pose_tune = create_pose_tune(astria, edited_url, args.pack_title, index)
         text = item["prompt"].replace(POSE_PLACEHOLDER, f"<faceid:{pose_tune['id']}:1.0>")
-        prompt = create_pack_prompt(astria, text, pack["id"])
+        prompt = create_pack_prompt(astria, text, pack["id"], aspect_ratio)
         results.append((prompt["id"], pose_tune["id"]))
     return pack, results
 
@@ -178,6 +286,10 @@ def main():
                         help="shoes mode: a lifestyle image URL. Repeat per pose.")
     parser.add_argument("--spec", help="silhouette mode: path to a JSON array of "
                                        '{"url": ..., "prompt": "...{pose}..."} objects.')
+    parser.add_argument("--aspect-ratio", dest="aspect_ratio",
+                        help="Force this aspect ratio for every generated prompt "
+                             "(e.g. 3:4). Omit to detect each source image's ratio "
+                             "and snap to the closest standard one.")
     parser.add_argument("--workspace", help="Workspace id (defaults to the astria CLI's configured workspace).")
     args = parser.parse_args()
 
@@ -185,6 +297,8 @@ def main():
         parser.error("shoes mode needs at least one --pose-image-url")
     if args.mode == "silhouette" and not args.spec:
         parser.error("silhouette mode needs --spec")
+    if args.aspect_ratio and args.aspect_ratio not in ASPECT_RATIOS:
+        parser.error(f"--aspect-ratio must be one of: {', '.join(ASPECT_RATIOS)}")
 
     astria = Astria(args.workspace)
     pack, results = (run_shoes if args.mode == "shoes" else run_silhouette)(astria, args)

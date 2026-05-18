@@ -148,9 +148,12 @@ a `pose` faceid tune, substitutes the new pose tune id into the prompt's
 `{pose}` placeholder, and creates the prompt assigned to the pack.
 
 Both variants accept `--workspace <id>` to target a specific workspace;
-otherwise the `astria` CLI's configured workspace is used. Each prints one
-status line per artifact to stderr and a final summary block to stdout with
-the new pack ID and per-pose `prompt_id` / `pose_tune_id` pairs.
+otherwise the `astria` CLI's configured workspace is used. They also accept
+`--aspect-ratio <ratio>` to force one output ratio for the whole run — by
+default each source image is downloaded, measured, and the pack prompt
+rendered at the closest standard ratio. Each prints one status line per
+artifact to stderr and a final summary block to stdout with the new pack ID
+and per-pose `prompt_id` / `pose_tune_id` pairs.
 
 ### 5. Report
 
@@ -181,6 +184,6 @@ prompts created, and point them to `/packs/<pack_id>`.
 
 - The barefoot / silhouette edit prompts are deliberately conservative — they keep the pose so the resulting tune captures the original styling minus the swapped-out parts.
 - `tune[name]` is hardcoded to `pose` (every output should be usable as a pose ref regardless of the original subject).
-- The pack uses `model_type=faceid` because the prompts inside reference faceid tunes (pose + the swapped references). Generation defaults: `resolution=2K`, `num_images=1`; aspect ratio is left unset so the edit follows the input image (Gemini rejects `aspect_ratio=auto`).
+- The pack uses `model_type=faceid` because the prompts inside reference faceid tunes (pose + the swapped references). Generation defaults: `resolution=2K`, `num_images=1`. The barefoot / silhouette **edit** leaves `aspect_ratio` unset so it follows the input image (Gemini rejects `aspect_ratio=auto`); the **pack prompt** is rendered at the source image's aspect ratio — `templatize.py` downloads each source image, measures it, and snaps to the nearest standard ratio (`1:1 2:3 3:4 4:5 9:16 5:4 4:3 3:2 16:9 21:9`), defaulting to `3:4` when the image can't be read. Pass `--aspect-ratio 3:4` to force one ratio for the whole run.
 - Astria dedups prompts by `(text, seed)` within a tune, so an identical edit instruction on two source photos would collapse onto one prompt. `templatize.py` gives each edit a per-image seed (derived from the source URL) — never append a marker to the prompt text, Nano Banana may render it into the image.
 - If the page is gated (Shopify login wall, paywall) `scrape.py` returns empty `images` — fall back to asking the user for direct image URLs.
