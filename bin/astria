@@ -434,6 +434,10 @@ def cmd_models(args, cfg):
         "default": record.get("default", "gemini"),
         "default_video_model": record.get("default_video_model"),
         "source": "built-in (offline)" if record.get("builtin") else "server",
+        "note": ("this is the curated set of popular models only — any --model "
+                 "also accepts a raw tune id directly. Browse every partner "
+                 "model and its tune id at astria.ai/gallery/tunes?branch=partner-1 "
+                 "(or run `astria tunes list --gallery --branch partner-1`)."),
         "models": record.get("models", {}),
         "video_models": record.get("video_models", {}),
     })
@@ -454,6 +458,8 @@ def cmd_tunes_list(args, cfg):
         query.append(("offset", args.offset))
     if args.model_type:
         query.append(("model_type", args.model_type))
+    if args.branch:
+        query.append(("branch", args.branch))
     path = "/gallery/tunes" if args.gallery else "/tunes"
     tunes = request(cfg, "GET", path, query=query, workspace=args.workspace)
     emit([{k: t.get(k) for k in ("id", "title", "name", "model_type", "orig_images")} for t in tunes])
@@ -552,6 +558,9 @@ def _generate(args, cfg, video):
         form.append(field("prompt[resolution]", args.resolution))
     if getattr(args, "input_image", None):
         key, value = media_field("prompt[input_image]", args.input_image)
+        form.append(field(key, value))
+    if getattr(args, "mask_image", None):
+        key, value = media_field("prompt[mask_image]", args.mask_image)
         form.append(field(key, value))
     if video:
         form.append(field("prompt[video_model]", args.video_model))
@@ -1091,6 +1100,7 @@ def build_parser():
     p.add_argument("--title", help="filter by title / product name / SKU substring")
     p.add_argument("--name", action="append", help="filter by class name (repeatable)")
     p.add_argument("--model-type", help="filter by model_type (e.g. faceid)")
+    p.add_argument("--branch", help="filter by branch (e.g. partner-1 to discover partner models)")
     p.add_argument("--gallery", action="store_true", help="query the public gallery instead")
     p.add_argument("--limit")
     p.add_argument("--offset")
@@ -1152,6 +1162,7 @@ def build_parser():
     p.add_argument("--aspect-ratio", default="3:4", help="e.g. 3:4, 1:1, 16:9 (default: %(default)s)")
     p.add_argument("--resolution", help=resolution_help(models_record))
     p.add_argument("--input-image", help="URL or local file to edit")
+    p.add_argument("--mask-image", help="URL or local file to use as an inpainting mask")
     p.add_argument("--wait", action="store_true", help="block until images are ready")
     p.set_defaults(func=cmd_generate)
 
