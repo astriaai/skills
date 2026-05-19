@@ -66,10 +66,6 @@ MODEL_ENV = {
 }
 MODELS_TTL_DEFAULT = 86400
 
-POLL_INTERVAL_SEC = 4
-POLL_TIMEOUT_SEC = 8 * 60
-
-
 # --------------------------------------------------------------------------
 # errors / output
 # --------------------------------------------------------------------------
@@ -349,14 +345,85 @@ def media_field(prefix, value):
 # --------------------------------------------------------------------------
 # polling
 # --------------------------------------------------------------------------
+WAIT_TIMEOUT_SEC = 600
+WAIT_INTERVAL_SEC = 5
+WAIT_INTERVAL_MIN = 2
+WAIT_WORKERS = 6
+
+
+def prompt_settled(prompt):
+    """A prompt is settled once it has images OR a user_error — both are terminal."""
+    return bool(prompt.get("images")) or bool(prompt.get("user_error"))
+
+
+def wait_prompts(cfg, ids, *, workspace=None, timeout=WAIT_TIMEOUT_SEC,
+                 interval=WAIT_INTERVAL_SEC, on_settled=None):
+    """Poll many prompt ids in parallel until each settles or the wall-clock
+    timeout fires. Returns {id: prompt_record_or_None}. on_settled(id, record)
+    fires once per id as soon as it settles, so callers can stream output."""
+    interval = max(WAIT_INTERVAL_MIN, interval)
+    deadline = time.monotonic() + timeout
+    settled = {}
+    pending = list(ids)
+
+    while pending and time.monotonic() < deadline:
+        round_start = time.monotonic()
+        queue = list(pending)
+        lock = threading.Lock()
+        results = {}
+        errors = {}
+
+        def pump():
+            while True:
+                with lock:
+                    if not queue:
+                        return
+                    pid = queue.pop(0)
+                try:
+                    results[pid] = request(cfg, "GET", f"/prompts/{pid}.json", workspace=workspace)
+                except AstriaError as exc:
+                    # Transient — retry this id next round, don't mark settled.
+                    errors[pid] = str(exc)
+
+        threads = [threading.Thread(target=pump) for _ in range(min(WAIT_WORKERS, len(queue)))]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        still_pending = []
+        for pid in pending:
+            record = results.get(pid)
+            if record is not None and prompt_settled(record):
+                settled[pid] = record
+                if on_settled:
+                    on_settled(pid, record)
+            else:
+                still_pending.append(pid)
+        pending = still_pending
+
+        if not pending:
+            break
+        # Sleep the remainder of the interval — but not past the deadline.
+        elapsed = time.monotonic() - round_start
+        nap = min(max(0.0, interval - elapsed), max(0.0, deadline - time.monotonic()))
+        if nap > 0:
+            time.sleep(nap)
+
+    for pid in pending:
+        settled.setdefault(pid, None)
+    return settled
+
+
 def poll_prompt(cfg, tune_id, prompt_id, workspace=None):
-    deadline = time.monotonic() + POLL_TIMEOUT_SEC
-    while time.monotonic() < deadline:
-        prompt = request(cfg, "GET", f"/tunes/{tune_id}/prompts/{prompt_id}", workspace=workspace)
-        if prompt.get("images"):
-            return prompt
-        time.sleep(POLL_INTERVAL_SEC)
-    raise AstriaError(f"prompt {prompt_id} did not finish within {POLL_TIMEOUT_SEC}s")
+    """Single-prompt wait used by `generate --wait` / `video --wait`. Delegates
+    to wait_prompts so both code paths share the same settle rules."""
+    results = wait_prompts(cfg, [str(prompt_id)], workspace=workspace,
+                           timeout=WAIT_TIMEOUT_SEC, interval=WAIT_INTERVAL_SEC)
+    record = results.get(str(prompt_id))
+    if record is None:
+        raise AstriaError(f"prompt {prompt_id} did not finish within {WAIT_TIMEOUT_SEC}s")
+    return record
 
 
 # --------------------------------------------------------------------------
@@ -539,6 +606,47 @@ def cmd_prompts_update(args, cfg):
     if not form:
         die("nothing to update — pass --pack-id or --workspace-id")
     emit(request(cfg, "PATCH", f"/tunes/{tune_id}/prompts/{args.id}", form=form, workspace=args.workspace))
+
+
+def cmd_prompts_wait(args, cfg):
+    ids = collect_prompt_ids(args)
+    if not ids:
+        die("no prompt ids — pass them as arguments, via --prompts-file, or on stdin")
+
+    out_lock = threading.Lock()
+    counts = {"done": 0, "failed": 0}
+
+    def on_settled(pid, record):
+        status = "done" if record.get("images") else "failed"
+        counts[status] += 1
+        line = {
+            "id": pid,
+            "images": record.get("images") or [],
+            "user_error": record.get("user_error"),
+            "status": status,
+            "settled_at": int(time.time()),
+        }
+        with out_lock:
+            json.dump(line, sys.stdout, ensure_ascii=False)
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+    results = wait_prompts(cfg, ids, workspace=args.workspace,
+                           timeout=args.timeout, interval=args.interval,
+                           on_settled=on_settled)
+    timed_out = [pid for pid in ids if results.get(pid) is None]
+    summary = {
+        "total": len(ids),
+        "succeeded": counts["done"],
+        "failed": counts["failed"],
+        "timed_out": timed_out,
+    }
+    with out_lock:
+        json.dump(summary, sys.stdout, ensure_ascii=False)
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+    if timed_out:
+        sys.exit(1)
 
 
 # --------------------------------------------------------------------------
@@ -1152,6 +1260,15 @@ def build_parser():
     p.add_argument("--pack-id")
     p.add_argument("--workspace-id")
     p.set_defaults(func=cmd_prompts_update)
+    p = prompts.add_parser("wait", parents=[ws_parent],
+                           help="block until one or more prompts have images or a user_error")
+    p.add_argument("ids", nargs="*", help="prompt ids (also accepted via --prompts-file or stdin)")
+    p.add_argument("--prompts-file", help="file of prompt ids (one per line or whitespace-separated)")
+    p.add_argument("--timeout", type=int, default=WAIT_TIMEOUT_SEC,
+                   help=f"total wall-clock cap in seconds (default: {WAIT_TIMEOUT_SEC})")
+    p.add_argument("--interval", type=int, default=WAIT_INTERVAL_SEC,
+                   help=f"polling interval in seconds (default: {WAIT_INTERVAL_SEC}, min {WAIT_INTERVAL_MIN})")
+    p.set_defaults(func=cmd_prompts_wait)
 
     # generate
     p = sub.add_parser("generate", parents=[ws_parent], help="generate images")
