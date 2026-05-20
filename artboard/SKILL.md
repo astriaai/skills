@@ -230,7 +230,7 @@ teeth visible`.
 
    ```bash
    astria video --video-model seedance2_720p \
-     --aspect-ratio <VIDEO_RATIO> --duration 15 \
+     --aspect-ratio <VIDEO_RATIO> --num-images 1 --duration 15 \
      --text "First frame placeholder." \
      --video-prompt "A cinematic video with the below video shots.
    1) <shot 1 — copied verbatim from the artboard's --text>
@@ -238,6 +238,9 @@ teeth visible`.
    ...
    16) <shot 16>"
    ```
+
+   `--num-images 1` is required for video — without it the API returns
+   `{"num_images":["must be 1 for --video"]}`.
 
    **Reference budget.** Video models cap the number of unique
    `<faceid:NNNN:1.0>` references per prompt much more tightly than image
