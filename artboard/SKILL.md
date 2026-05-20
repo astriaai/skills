@@ -48,15 +48,14 @@ Set **both** the `--aspect-ratio` flag and the tile description in the header
 
 ## Prompt structure
 
-The `--text` is a **header line** followed by **16 numbered shots**, then the
-`--gpt_quality high` flag at the very end:
+The `--text` is **the 16 numbered shots themselves**, then `--gpt_quality high`
+inline at the end. No generic "A 4x4 storyboard artboard…" header — the
+prompt IS the tile descriptions. The 4x4 grid layout is communicated to GPT
+Image 2 by the numbered list (1–16) plus the CLI's `--aspect-ratio` and
+`--num-images 1` flags.
 
 ```
-A 4x4 storyboard artboard — 16 cinematic tiles, each a <ASPECT> film still,
-numbered 1–16, read left-to-right then top-to-bottom. Same character,
-wardrobe, location and color grade across every tile. <one global style line>.
-
-1) <shot scale> of <subject + reference tokens>, <one clear action>, <technique>. <atmosphere>.
+1) <shot scale> of <subject + reference tokens>, <one clear action>, <technique>. <atmosphere — name the light, grade and grain here so every tile inherits it>.
 2) ...
 ...
 16) ...
@@ -66,6 +65,10 @@ wardrobe, location and color grade across every tile. <one global style line>.
 Each shot is one short line. Template per shot:
 
 `N) <shot scale> of <subject with reference tokens>, <one clear action><, optional cinematic technique>.`
+
+Tile 1 carries the global style cue (light, color grade, grain, atmosphere)
+once — the remaining 15 tiles inherit it through "the same woman", "her",
+re-used reference tokens, and named continuity.
 
 ## Shot-scale rotation — the cinematic core
 
@@ -128,10 +131,6 @@ teeth visible`.
 ## Worked example A — beach / fashion (multiple products, 16:9 video)
 
 ```
-A 4x4 storyboard artboard — 16 cinematic tiles, each a 16:9 film still,
-numbered 1–16, read left-to-right then top-to-bottom. Same woman, wardrobe,
-location and warm color grade across every tile. Natural sunlight, soft grain.
-
 1) Close-up of the <faceid:4644372:1.0> woman laughing, wearing a straw hat. Natural sunlight, soft film grain, warm beach atmosphere.
 2) Long shot of the same woman wearing the <faceid:4767051:1.0> dress and the <faceid:4767037:1.0> bag, holding her hat, striking the water with her leg.
 3) Back to close-up, depth of field, she's laughing, shadowing the camera with her hand — background becoming completely blurred.
@@ -154,11 +153,6 @@ location and warm color grade across every tile. Natural sunlight, soft grain.
 ## Worked example B — urban / single hero product (9:16 vertical video)
 
 ```
-A 4x4 storyboard artboard — 16 cinematic tiles, each a 9:16 film still,
-numbered 1–16, read left-to-right then top-to-bottom. Same girl, the same
-backpack, one location and golden color grade across every tile. Morning
-light, soft film grain.
-
 1) Close-up of the <faceid:3982430:1.0> girl smiling with wind in her hair. Natural morning light, soft film grain, urban park atmosphere.
 2) Long shot of the same girl wearing the <faceid:3982432:1.0> backpack, walking confidently through autumn leaves.
 3) Back to close-up, depth of field, she's laughing, tucking hair behind her ear — background becoming completely blurred.
@@ -180,26 +174,45 @@ light, soft film grain.
 
 ## Workflow
 
-1. **Query the references.** Run `astria tunes list` (with `--title` / `--name`
-   filters) to find the faceid tunes for the character and products. Inspect
-   candidates with `astria tunes get <id>` to confirm the `name` class. Don't
-   send the user off to browse — gather the candidates yourself.
+1. **Inventory the references.** Two complementary sources — the chat session
+   is already scoped to the workspace, so the commands below need no `-w`:
+   - **Recent usage** — `astria prompts list --limit 20` returns the last
+     ~20 prompts of any kind (Nano Banana, GPT Image 2, video, …). Scan
+     their `text` for `<faceid:NNNN:1.0>` tokens; these are the references
+     the user has actually been working with. Count how often each token
+     appears — the frequent ones are the workspace's **established cast**.
+   - **Available tunes** — `astria tunes list` (with `--title` / `--name`
+     filters) for the full set of face / garment / product tunes trained
+     here. Inspect candidates with `astria tunes get <id>` to confirm the
+     `name` class.
+
+   Do **not** assume an artboard already exists in the workspace; treat any
+   recent prompts as signal. Gather the candidates yourself — don't send the
+   user off to browse.
 2. **Clarify the brief — ask before writing.** Use one `AskUserQuestion` call;
    per the interaction rule, put *only* questions in that turn:
    - **Final video aspect ratio** — *always* ask (`16:9` / `9:16` / `1:1` /
      `4:5`). The tiles must match the video the artboard will drive.
    - **Topic / action / vibe** — if the user hasn't already said what the video
      is about, ask for the subject, setting and mood.
-   - **References** — present the tunes from step 1 as a **multi-select**
-     (`multiSelect: true`, with image thumbnails) so the user picks which
-     character and products appear. If a needed reference is missing, ask for
-     an image and create the tune with `astria tunes create`.
+   - **References — always a multi-select. No exceptions.** Single
+     `AskUserQuestion` with `multiSelect: true`. Pre-select the **established
+     cast** (the `<faceid:NNNN:1.0>` tokens that recur across the recent
+     prompts from step 1); show the rest of the workspace's tunes unselected.
+     Include image thumbnails for each option so the user picks visually. If
+     a needed reference is missing, ask for an image and create the tune with
+     `astria tunes create`. **"Generic cast" is never the default** — every
+     tile that shows the character or a product must carry a
+     `<faceid:NNNN:1.0>` token.
 
    Skip any question whose answer the user already gave; only ask what's
-   genuinely unclear.
-3. **Write the artboard** — header + 16 numbered shots — following the
-   shot-scale rotation, consistency rules and story arc above. Set the header
-   and `--aspect-ratio` to the ratio chosen in step 2.
+   genuinely unclear (except the references multi-select — that one always
+   happens).
+3. **Write the artboard** — 16 numbered shots — following the shot-scale
+   rotation, consistency rules and story arc above. No generic header line;
+   tile 1 carries the global style cue (light, color grade, grain, atmosphere)
+   so the remaining 15 tiles inherit it. Set `--aspect-ratio` to the ratio
+   chosen in step 2.
 4. **Show the user the full prompt text** for review/edit before generating.
 5. **Generate** (see below).
 6. **Hand off to video.** Tell the user the artboard is the reference for a
@@ -210,12 +223,10 @@ light, soft film grain.
 
 ```bash
 astria generate --model gpt-image-2 --aspect-ratio <VIDEO_RATIO> --num-images 1 \
-  --text "A 4x4 storyboard artboard — 16 cinematic tiles, each a <VIDEO_RATIO> film still...
-
-1) Close-up of the <faceid:4644372:1.0> woman laughing...
-2) Long shot of the same woman...
+  --text "1) Close-up of the <faceid:4644372:1.0> woman laughing, wearing a straw hat. Natural sunlight, soft film grain, warm beach atmosphere.
+2) Long shot of the same woman wearing the <faceid:4767051:1.0> dress and the <faceid:4767037:1.0> bag, holding her hat...
 ...
-16) Long shot — the surfboard set in the sand...
+16) Long shot — the surfboard set in the sand beside the <faceid:4767037:1.0> bag, the woman's silhouette walking toward the water.
 --gpt_quality high"
 ```
 
@@ -234,8 +245,12 @@ astria generate --model gpt-image-2 --aspect-ratio <VIDEO_RATIO> --num-images 1 
 
 - **16 tiles, 4x4** is the default. Going past ~18 makes individual tiles too
   small for the video pass to read.
-- Every tile that shows the character or a product must carry its reference
-  token — a tile with a bare "woman" loses likeness.
+- **References are mandatory.** Every tile that shows the character or a
+  product must carry its `<faceid:NNNN:1.0>` token. Bare descriptions
+  ("teenage boy", "young woman") lose likeness and break the artboard's job
+  as a text-to-video reference. If the user hasn't told you which references
+  to use, ask via the multi-select question in step 2 — never default to a
+  generic cast.
 - One clear, *filmable* action per tile; the video model animates the motion
   between cuts.
 - Keep one color grade and lighting mood named in tile 1 — consistency across
