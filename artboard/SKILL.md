@@ -216,9 +216,30 @@ teeth visible`.
    chosen in step 2.
 4. **Show the user the full prompt text** for review/edit before generating.
 5. **Generate** (see below).
-6. **Hand off to video.** Tell the user the artboard is the reference for a
-   text-to-video pass — see the `astria-api` skill (`astria video` command)
-   for turning it into the 15-second cut.
+6. **Hand off to video — same prompt drives the cut.** Run `astria video`
+   with the artboard image as `--input-image` and the **same 16 numbered
+   shots** as `--video-prompt`, prefixed with one line:
+   **"A cinematic video with the below video shots."** That reframes the
+   list from "tiles in a grid" to "cuts in a 15-second sequence" — the
+   shots themselves stay verbatim, including the `<faceid:NNNN:1.0>`
+   tokens, so the video inherits the artboard's cast, wardrobe, location
+   and look.
+
+   ```bash
+   astria video --video-model seedance2_720p \
+     --aspect-ratio <VIDEO_RATIO> --duration 15 \
+     --input-image "<artboard image URL from step 5>" \
+     --text "First frame from the artboard." \
+     --video-prompt "A cinematic video with the below video shots.
+   1) <shot 1 — copied verbatim from the artboard's --text>
+   2) <shot 2>
+   ...
+   16) <shot 16>"
+   ```
+
+   `--input-image` carries the visual reference; the 16 numbered lines
+   come straight from the artboard prompt, no rewriting. Adjust
+   `--video-model` to whatever fits the brief (see `astria-api`).
 
 ## Generation command
 
