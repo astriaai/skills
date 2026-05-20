@@ -231,7 +231,7 @@ teeth visible`.
    ```bash
    astria video --video-model seedance2_720p \
      --aspect-ratio <VIDEO_RATIO> --num-images 1 --duration 15 \
-     --text "First frame placeholder." \
+     --text "<the artboard's shot 1, verbatim — sets the first video frame>" \
      --video-prompt "A cinematic video with the below video shots.
    1) <shot 1 — copied verbatim from the artboard's --text>
    2) <shot 2>
@@ -241,6 +241,15 @@ teeth visible`.
 
    `--num-images 1` is required for video — without it the API returns
    `{"num_images":["must be 1 for --video"]}`.
+
+   **`--text` must be a real first-frame description, not a placeholder.**
+   Astria generates the video's first frame from this text (via Nano
+   Banana, by default) and seedance animates from there. A vague string
+   like `"First frame placeholder."` produces an unrelated image
+   (verified live — yields a generic photo with the faceids in some
+   random scene), and seedance then has nothing coherent to animate
+   from. Copy the artboard's **shot 1** verbatim into `--text` so the
+   first frame matches the artboard's opening close-up.
 
    **Reference budget.** Video models cap the number of unique
    `<faceid:NNNN:1.0>` references per prompt much more tightly than image
