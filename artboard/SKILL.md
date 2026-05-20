@@ -217,19 +217,21 @@ teeth visible`.
 4. **Show the user the full prompt text** for review/edit before generating.
 5. **Generate** (see below).
 6. **Hand off to video — same prompt drives the cut.** Run `astria video`
-   with the artboard image as `--input-image` and the **same 16 numbered
-   shots** as `--video-prompt`, prefixed with one line:
-   **"A cinematic video with the below video shots."** That reframes the
-   list from "tiles in a grid" to "cuts in a 15-second sequence" — the
-   shots themselves stay verbatim, including the `<faceid:NNNN:1.0>`
-   tokens, so the video inherits the artboard's cast, wardrobe, location
-   and look.
+   with the **same 16 numbered shots** as `--video-prompt`, prefixed with
+   one line: **"A cinematic video with the below video shots."** That
+   reframes the list from "tiles in a grid" to "cuts in a 15-second
+   sequence" — the shot descriptions stay verbatim, including their
+   `<faceid:NNNN:1.0>` tokens, so cast continuity carries into the cut.
+
+   **Do NOT pass the artboard image as `--input-image`.** The artboard
+   exists to pre-visualize the story for the user before the video pass;
+   it is not a video first frame. Feeding a 4×4 grid to the video model
+   gets you a grid animating in place, not a cinematic cut.
 
    ```bash
    astria video --video-model seedance2_720p \
      --aspect-ratio <VIDEO_RATIO> --duration 15 \
-     --input-image "<artboard image URL from step 5>" \
-     --text "First frame from the artboard." \
+     --text "First frame placeholder." \
      --video-prompt "A cinematic video with the below video shots.
    1) <shot 1 — copied verbatim from the artboard's --text>
    2) <shot 2>
@@ -237,9 +239,14 @@ teeth visible`.
    16) <shot 16>"
    ```
 
-   `--input-image` carries the visual reference; the 16 numbered lines
-   come straight from the artboard prompt, no rewriting. Adjust
-   `--video-model` to whatever fits the brief (see `astria-api`).
+   **Reference budget.** Video models cap the number of unique
+   `<faceid:NNNN:1.0>` references per prompt much more tightly than image
+   models — over the cap and the generation errors. Keep the video prompt
+   focused: prefer the face references (cast continuity is what carries
+   the cut) and drop most garment references, describing wardrobe in
+   plain words instead. If the artboard used many garment references,
+   trim them for the video prompt; the artboard already showed the user
+   how the garments look.
 
 ## Generation command
 
