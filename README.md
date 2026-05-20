@@ -60,7 +60,6 @@ needs nothing extra.
 | **navigation** | Astria app sitemap |
 | **landing-page-editor** | Edit a workspace's magazine-style landing page |
 | **templatize-page** | Turn a lookbook URL into a pose-swap pack |
-| **instagram-movie-producer** | Build fast-cut Instagram Reels with keyframed video |
 | **artboard** | Build a GPT Image 2 storyboard artboard — a 4x4 grid of 16 cinematic tiles for a ~15s video |
 
 ## The `astria` CLI

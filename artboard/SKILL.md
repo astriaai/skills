@@ -217,8 +217,8 @@ teeth visible`.
 4. **Show the user the full prompt text** for review/edit before generating.
 5. **Generate** (see below).
 6. **Hand off to video.** Tell the user the artboard is the reference for a
-   text-to-video pass — see the `instagram-movie-producer` and `astria-api`
-   skills for turning it into the 15-second cut.
+   text-to-video pass — see the `astria-api` skill (`astria video` command)
+   for turning it into the 15-second cut.
 
 ## Generation command
 

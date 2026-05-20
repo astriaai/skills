@@ -29,7 +29,6 @@
         { "name": "navigation", "path": "navigation", "invoke": "/astria:navigation" },
         { "name": "landing-page-editor", "path": "landing-page-editor", "invoke": "/astria:landing-page-editor" },
         { "name": "templatize-page", "path": "templatize-page", "invoke": "/astria:templatize-page" },
-        { "name": "instagram-movie-producer", "path": "instagram-movie-producer", "invoke": "/astria:instagram-movie-producer" },
         { "name": "artboard", "path": "artboard", "invoke": "/astria:artboard" }
       ]
     }
