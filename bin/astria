@@ -578,6 +578,8 @@ def cmd_prompts_list(args, cfg):
         value = getattr(args, key, None)
         if value:
             query.append((key, value))
+    for value in args.expand or []:
+        query.append(("expand[]", value))
     for flag in ("liked", "today", "is_video", "is_api"):
         if getattr(args, flag, False):
             query.append((flag, "true"))
@@ -587,13 +589,16 @@ def cmd_prompts_list(args, cfg):
         query.append(("offset", args.offset))
     path = f"/tunes/{args.tune_id}/prompts" if args.tune_id else "/prompts"
     prompts = request(cfg, "GET", path, query=query, workspace=args.workspace)
-    emit([{k: p.get(k) for k in ("id", "text", "num_images", "images", "aspect_ratio",
-                                 "resolution", "pack_id", "tune_id")} for p in prompts])
+    keys = ["id", "text", "num_images", "images", "aspect_ratio", "resolution", "pack_id", "tune_id"]
+    if args.expand:
+        keys += ["debug_images", "debug_filenames", "debug_content_types"]
+    emit([{k: p.get(k) for k in keys} for p in prompts])
 
 
 def cmd_prompts_get(args, cfg):
     tune_id = resolve_model(cfg, args.model) if args.model else args.tune
-    emit(request(cfg, "GET", f"/tunes/{tune_id}/prompts/{args.id}", workspace=args.workspace))
+    query = [("expand[]", value) for value in args.expand or []]
+    emit(request(cfg, "GET", f"/tunes/{tune_id}/prompts/{args.id}", query=query, workspace=args.workspace))
 
 
 def cmd_prompts_update(args, cfg):
@@ -1245,6 +1250,8 @@ def build_parser():
     p.add_argument("--today", action="store_true", help="only prompts created today")
     p.add_argument("--is-video", action="store_true", help="only video prompts")
     p.add_argument("--is-api", action="store_true", help="only prompts created via the API")
+    p.add_argument("--expand", action="append", choices=["debug_images", "prompt.debug_images"],
+                   help="expand a prompt field, e.g. debug_images (repeatable)")
     p.add_argument("--limit")
     p.add_argument("--offset")
     p.set_defaults(func=cmd_prompts_list)
@@ -1252,6 +1259,8 @@ def build_parser():
     p.add_argument("id")
     p.add_argument("--tune", help="tune id the prompt belongs to")
     p.add_argument("--model", help="model name instead of --tune")
+    p.add_argument("--expand", action="append", choices=["debug_images", "prompt.debug_images"],
+                   help="expand a prompt field, e.g. debug_images (repeatable)")
     p.set_defaults(func=cmd_prompts_get)
     p = prompts.add_parser("update", parents=[ws_parent], help="update a prompt (assign pack / move workspace)")
     p.add_argument("id")
