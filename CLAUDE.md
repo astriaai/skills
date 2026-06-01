@@ -12,7 +12,7 @@ This repo is a **Claude Code plugin marketplace**. It is consumed two ways:
 ## Layout
 
 The repo root is the plugin — skill directories sit at the top level so
-`npx skills` discovers them, mirroring `higgsfield-ai/skills`.
+`npx skills` discovers them
 
 ```
 .claude-plugin/
