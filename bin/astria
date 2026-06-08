@@ -733,7 +733,9 @@ def _generate(args, cfg, video):
     tune_id = resolve_model(cfg, args.model)
     reference_tokens = create_reference_tokens(args, cfg, tune_id, reference_specs)
     prompt_text = prepend_reference_tokens(args.text, reference_tokens)
-    form = [field("prompt[text]", prompt_text)]
+    form = []
+    if prompt_text is not None:
+        form.append(field("prompt[text]", prompt_text))
     # Editing a single input image defaults to one result; text-to-image to two.
     num_images = resolve_num_images(cfg, args.num_images, 1 if getattr(args, "input_image", None) else 2)
     form.append(field("prompt[num_images]", num_images))
@@ -775,6 +777,10 @@ def _generate(args, cfg, video):
 
 
 def cmd_generate(args, cfg):
+    if getattr(args, "video_prompt", None):
+        die("--video-prompt belongs to `astria video`, not `astria generate`. Use `astria video --video-prompt ...` for video generation.")
+    if not args.text:
+        die("--text is required for `astria generate`. For video generation without a first-frame prompt, use `astria video --video-prompt ...`.")
     _generate(args, cfg, video=False)
 
 
@@ -1357,9 +1363,18 @@ def build_parser():
     p.set_defaults(func=cmd_prompts_wait)
 
     # generate
-    p = sub.add_parser("generate", parents=[ws_parent], help="generate images")
+    p = sub.add_parser(
+        "generate", parents=[ws_parent], help="generate images",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  astria generate --model wan-2-7 --text \"plain white background\" \\\n"
+            "    --images \"dress=./dress.jpg\" --images \"woman=./woman.jpg\" --num-images 1 --wait"
+        ),
+    )
     p.add_argument("--model", default=None, help=image_model_help(models_record))
-    p.add_argument("--text", required=True, help="prompt text; embed references as <faceid:ID:1>")
+    p.add_argument("--text", help="prompt text; embed references as <faceid:ID:1>")
+    p.add_argument("--video-prompt", help=argparse.SUPPRESS)
     p.add_argument("--num-images", help="override config default_num_images; otherwise 2, or 1 with --input-image")
     p.add_argument("--seed", help="generation seed; also makes an otherwise-identical prompt distinct")
     p.add_argument("--aspect-ratio", default="3:4", help="e.g. 3:4, 1:1, 16:9 (default: %(default)s)")
@@ -1374,7 +1389,7 @@ def build_parser():
     # video
     p = sub.add_parser("video", parents=[ws_parent], help="generate video")
     p.add_argument("--model", default=None, help=image_model_help(models_record, "first-frame image model"))
-    p.add_argument("--text", required=True, help="first-frame prompt text")
+    p.add_argument("--text", help="first-frame prompt text")
     p.add_argument("--video-model", required=True, help=video_model_help(models_record))
     p.add_argument("--video-prompt", required=True, help="motion / action description")
     p.add_argument("--duration", help="seconds (model-dependent)")
