@@ -23,7 +23,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 VERSION = "1.0.0"
 
@@ -144,10 +144,21 @@ def base_url(cfg):
     return (os.environ.get("ASTRIA_BASE_URL") or cfg.get("base_url") or DEFAULT_BASE_URL).rstrip("/")
 
 
+def login_hint(cfg, override_base_url=None):
+    return f"{(override_base_url or base_url(cfg)).rstrip('/')}/users/edit/api"
+
+
 def resolve_workspace(cfg, override):
     """Workspace scope: --workspace flag > env > config. `all` and `personal` pass through."""
     ws = override or os.environ.get("ASTRIA_WORKSPACE_ID") or os.environ.get("WORKSPACE_ID") or cfg.get("workspace_id")
     return str(ws) if ws not in (None, "", "personal") else None
+
+
+def resolve_num_images(cfg, override, fallback):
+    value = override or cfg.get("default_num_images") or fallback
+    if not str(value).isdigit() or int(value) < 1:
+        die("default_num_images / --num-images must be a positive integer")
+    return str(value)
 
 
 # --- model catalog (/cli/models, cached daily) ---
@@ -286,7 +297,9 @@ def request(cfg, method, path, *, query=None, form=None, json_body=None, workspa
         argv += ["-H", "Content-Type: application/json", "--data-binary", "@-"]
         stdin = json.dumps(json_body).encode()
     for key, value in (form or []):
-        argv += ["-F", f"{key}={value}"]
+        value = str(value)
+        argv += (["-F", f"{key}={value}"] if value.startswith("@")
+                 else ["--form-string", f"{key}={value}"])
 
     argv += ["-w", "\n%{http_code}", url]
 
@@ -435,7 +448,7 @@ def cmd_login(args, cfg):
         if sys.stdin.isatty():
             try:
                 import getpass
-                key = getpass.getpass("Astria API key (astria.ai/users/edit/api): ").strip()
+                key = getpass.getpass(f"Astria API key ({login_hint(cfg, args.base_url)}): ").strip()
             except (EOFError, KeyboardInterrupt):
                 die("aborted")
         else:
@@ -478,19 +491,27 @@ def cmd_config(args, cfg):
             "base_url": base_url(cfg),
             "workspace_id": resolve_workspace(cfg, None),
             "default_model": cfg.get("default_model", "gemini"),
+            "default_num_images": cfg.get("default_num_images"),
             "config_path": str(CONFIG_PATH),
             "authenticated": bool(os.environ.get("ASTRIA_API_KEY") or os.environ.get("ASTRIA_AUTH_TOKEN") or cfg.get("api_key")),
         })
     elif args.action == "set":
         if not args.key or args.value is None:
             die("usage: astria config set <key> <value>")
-        allowed = {"base_url", "workspace_id", "default_model",
+        aliases = {"workspace": "workspace_id"}
+        allowed = {"base_url", "workspace_id", "workspace", "default_model", "default_num_images",
                    "gemini_tune_id", "seedream_tune_id", "gpt-image-2_tune_id"}
         if args.key not in allowed:
             die(f"unknown config key {args.key!r} — one of: {', '.join(sorted(allowed))}")
-        cfg[args.key] = args.value
+        key = aliases.get(args.key, args.key)
+        if key == "default_num_images":
+            if not str(args.value).isdigit() or int(args.value) < 1:
+                die("default_num_images must be a positive integer")
+            cfg[key] = str(int(args.value))
+        else:
+            cfg[key] = args.value
         save_config(cfg)
-        print(f"Set {args.key} = {args.value}")
+        print(f"Set {key} = {cfg[key]}")
 
 
 def cmd_models(args, cfg):
@@ -657,11 +678,64 @@ def cmd_prompts_wait(args, cfg):
 # --------------------------------------------------------------------------
 # commands — generate (image) / video
 # --------------------------------------------------------------------------
+def parse_reference_specs(values):
+    specs = []
+    for raw in values or []:
+        if "=" not in raw:
+            die("invalid --images value: use NAME=PATH_OR_URL, e.g. --images woman=./model.jpg")
+        name, image = raw.split("=", 1)
+        name = name.strip()
+        image = image.strip()
+        if not name or not image:
+            die("invalid --images value: both NAME and PATH_OR_URL are required")
+        specs.append((name, image))
+    return specs
+
+
+def reference_image_field(value):
+    if str(value).startswith(("http://", "https://")):
+        return field("tune[image_urls][]", value)
+    if not Path(value).is_file():
+        die(f"file not found: {value}")
+    return field("tune[images][]", f"@{value}")
+
+
+def reference_title(name, image):
+    parsed = urlparse(str(image))
+    label = Path(parsed.path).stem if parsed.scheme else Path(image).stem
+    return label or name
+
+
+def create_reference_tokens(args, cfg, tune_id, reference_specs):
+    tokens = []
+    for name, image in reference_specs:
+        form = [
+            field("tune[title]", reference_title(name, image)),
+            field("tune[name]", name),
+            field("tune[model_type]", "faceid"),
+            field("tune[base_tune_id]", tune_id),
+            reference_image_field(image),
+        ]
+        tune = request(cfg, "POST", "/tunes", form=form, workspace=args.workspace)
+        tokens.append(f"<faceid:{tune['id']}:1>")
+    return tokens
+
+
+def prepend_reference_tokens(text, tokens):
+    if text is None:
+        return text
+    missing = [token for token in tokens if token not in text]
+    return f"{' '.join(missing)} {text}".strip() if missing else text
+
+
 def _generate(args, cfg, video):
+    reference_specs = parse_reference_specs(getattr(args, "images", None))
     tune_id = resolve_model(cfg, args.model)
-    form = [field("prompt[text]", args.text)]
+    reference_tokens = create_reference_tokens(args, cfg, tune_id, reference_specs)
+    prompt_text = prepend_reference_tokens(args.text, reference_tokens)
+    form = [field("prompt[text]", prompt_text)]
     # Editing a single input image defaults to one result; text-to-image to two.
-    num_images = args.num_images or (1 if getattr(args, "input_image", None) else 2)
+    num_images = resolve_num_images(cfg, args.num_images, 1 if getattr(args, "input_image", None) else 2)
     form.append(field("prompt[num_images]", num_images))
     if getattr(args, "seed", None):
         form.append(field("prompt[seed]", args.seed))
@@ -677,7 +751,8 @@ def _generate(args, cfg, video):
         form.append(field(key, value))
     if video:
         form.append(field("prompt[video_model]", args.video_model))
-        form.append(field("prompt[video_prompt]", args.video_prompt))
+        form.append(field("prompt[video_prompt]",
+                          prepend_reference_tokens(args.video_prompt, reference_tokens)))
         if args.duration:
             form.append(field("prompt[video_duration]", args.duration))
         for opt, prefix in (("first_frame", "prompt[video_first_frame]"),
@@ -704,6 +779,8 @@ def cmd_generate(args, cfg):
 
 
 def cmd_video(args, cfg):
+    if getattr(args, "input_image", None):
+        die("--input-image is for image generation/editing. For video, use --first-frame, --last-frame, --input-video, or references via --images NAME=PATH_OR_URL.")
     _generate(args, cfg, video=True)
 
 
@@ -1128,7 +1205,7 @@ def cmd_session_hook(args, cfg):
         out["hookSpecificOutput"]["additionalContext"] = (
             "The Astria plugin is installed but not authenticated. If the user asks to do "
             "anything with Astria (generate images, manage tunes/packs), tell them to run "
-            "`astria login` first (API key at astria.ai/users/edit/api)."
+            f"`astria login` first (API key at {login_hint(cfg)})."
         )
     emit(out)
 
@@ -1283,12 +1360,14 @@ def build_parser():
     p = sub.add_parser("generate", parents=[ws_parent], help="generate images")
     p.add_argument("--model", default=None, help=image_model_help(models_record))
     p.add_argument("--text", required=True, help="prompt text; embed references as <faceid:ID:1>")
-    p.add_argument("--num-images", help="default: 2, or 1 with --input-image")
+    p.add_argument("--num-images", help="override config default_num_images; otherwise 2, or 1 with --input-image")
     p.add_argument("--seed", help="generation seed; also makes an otherwise-identical prompt distinct")
     p.add_argument("--aspect-ratio", default="3:4", help="e.g. 3:4, 1:1, 16:9 (default: %(default)s)")
     p.add_argument("--resolution", help=resolution_help(models_record))
     p.add_argument("--input-image", help="URL or local file to edit")
     p.add_argument("--mask-image", help="URL or local file to use as an inpainting mask")
+    p.add_argument("--images", action="append", metavar="NAME=PATH_OR_URL",
+                   help="Attach reference image. Name is the main subject class, for example: man, woman, shoes, outfit, shirt, background, style")
     p.add_argument("--wait", action="store_true", help="block until images are ready")
     p.set_defaults(func=cmd_generate)
 
@@ -1302,8 +1381,10 @@ def build_parser():
     p.add_argument("--aspect-ratio", default="3:4", help="e.g. 3:4, 1:1, 16:9 (default: %(default)s)")
     p.add_argument("--resolution", help=resolution_help(
         models_record, "first-frame image resolution (video resolution is set by --video-model)"))
-    p.add_argument("--num-images", help="default: 2, or 1 with --input-image")
-    p.add_argument("--input-image")
+    p.add_argument("--num-images", help="override config default_num_images; otherwise 2")
+    p.add_argument("--input-image", help=argparse.SUPPRESS)
+    p.add_argument("--images", action="append", metavar="NAME=PATH_OR_URL",
+                   help="Attach reference image. Name is the main subject class, for example: man, woman, shoes, outfit, shirt, background, style")
     p.add_argument("--first-frame", help="URL or file overriding the rendered first frame")
     p.add_argument("--last-frame", help="URL or file for keyframe models")
     p.add_argument("--input-video", help="URL or file for motion-control models")
