@@ -14,9 +14,11 @@ environment variables instead, so it never needs a config file.
 Only depends on Python 3 stdlib + `curl` (used for the actual HTTP).
 """
 import argparse
+import ast
 import json
 import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -25,7 +27,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
 def _client_token():
@@ -44,6 +46,7 @@ _client = _client_token()
 if _client:
     USER_AGENT += f" ({_client})"
 DEFAULT_BASE_URL = "https://api.astria.ai"
+UPGRADE_URL = "https://raw.githubusercontent.com/astriaai/cli/main/astria"
 
 CONFIG_DIR = Path(os.environ.get("ASTRIA_CONFIG_DIR") or (Path.home() / ".astria"))
 # CONFIG_PATH / MODELS_CACHE are profile-specific — finalised by apply_profile().
@@ -227,6 +230,22 @@ def check_cli_version(record):
     if latest and current < latest:
         print(f"astria: a newer CLI is available ({cli.get('latest_version')}) — {upgrade}",
               file=sys.stderr)
+
+
+def downloaded_cli_version(source):
+    match = re.search(r'^VERSION = "([^"]+)"', source, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def current_executable_path(override=None):
+    if override:
+        return Path(override).resolve()
+    candidate = Path(sys.argv[0])
+    if not candidate.is_absolute() and candidate.parent == Path("."):
+        found = shutil.which(sys.argv[0])
+        if found:
+            candidate = Path(found)
+    return candidate.resolve()
 
 
 def model_catalog(cfg):
@@ -529,6 +548,54 @@ def cmd_models(args, cfg):
         "models": record.get("models", {}),
         "video_models": record.get("video_models", {}),
     })
+
+
+def cmd_upgrade(args, cfg):
+    record = None if args.url else fetch_models(cfg)
+    record = record or load_models_cache() or {}
+    cli = record.get("cli") or {}
+    url = args.url or cli.get("download_url") or UPGRADE_URL
+    target = current_executable_path(args.path)
+    current = _version_tuple(VERSION)
+
+    try:
+        proc = subprocess.run(["curl", "-fsSL", url], capture_output=True)
+    except FileNotFoundError:
+        die("`curl` not found on PATH — install curl")
+    if proc.returncode != 0:
+        raise AstriaError(f"could not download upgrade from {url}: {proc.stderr.decode('utf-8', 'replace').strip()}")
+
+    try:
+        source = proc.stdout.decode("utf-8")
+        ast.parse(source)
+    except (UnicodeDecodeError, SyntaxError) as exc:
+        raise AstriaError(f"downloaded upgrade is not a valid astria CLI script: {exc}")
+
+    new_version = downloaded_cli_version(source)
+    downloaded = _version_tuple(new_version)
+    if current and downloaded and downloaded < current and not args.force:
+        die(f"refusing to downgrade astria {VERSION} to {new_version}; pass --force to install anyway")
+    if current and downloaded and downloaded == current and not args.force:
+        print(f"astria {VERSION} is already current at {target}")
+        return
+    if not target.is_file():
+        die(f"cannot upgrade {target}: executable file not found")
+    if not os.access(target, os.W_OK):
+        die(f"cannot write {target}; rerun with permissions to update that file")
+
+    tmp = target.with_name(f".{target.name}.upgrade-{os.getpid()}")
+    try:
+        mode = target.stat().st_mode & 0o777
+        tmp.write_bytes(proc.stdout)
+        tmp.chmod(mode or 0o755)
+        os.replace(tmp, target)
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+
+    print(f"Upgraded astria {VERSION} -> {new_version or 'unknown'} at {target}")
 
 
 # --------------------------------------------------------------------------
@@ -1290,6 +1357,12 @@ def build_parser():
     p.add_argument("--refresh", action="store_true", help="force a refresh from the server")
     p.set_defaults(func=cmd_models)
 
+    p = sub.add_parser("upgrade", help="upgrade this astria executable in place")
+    p.add_argument("--url", help=argparse.SUPPRESS)
+    p.add_argument("--path", help=argparse.SUPPRESS)
+    p.add_argument("--force", action="store_true", help="install even if the downloaded version is not newer")
+    p.set_defaults(func=cmd_upgrade)
+
     # tunes
     tunes = sub.add_parser("tunes", help="references / fine-tuned models").add_subparsers(dest="sub", required=True)
     p = tunes.add_parser("list", parents=[ws_parent], help="list tunes")
@@ -1387,7 +1460,17 @@ def build_parser():
     p.set_defaults(func=cmd_generate)
 
     # video
-    p = sub.add_parser("video", parents=[ws_parent], help="generate video")
+    p = sub.add_parser(
+        "video", parents=[ws_parent], help="generate video",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  astria video --video-model seedance2_fast_480p \\\n"
+            "    --video-prompt \"woman wearing dress, plain white background\" \\\n"
+            "    --images \"dress=./dress.jpg\" --images \"woman=./woman.jpg\" \\\n"
+            "    --num-images 1 --wait"
+        ),
+    )
     p.add_argument("--model", default=None, help=image_model_help(models_record, "first-frame image model"))
     p.add_argument("--text", help="first-frame prompt text")
     p.add_argument("--video-model", required=True, help=video_model_help(models_record))
@@ -1517,7 +1600,8 @@ def main():
     args = build_parser().parse_args()
     apply_profile(resolve_profile(args.profile))
     cfg = load_config()
-    check_cli_version(load_models_cache())
+    if args.command != "upgrade":
+        check_cli_version(load_models_cache())
     try:
         args.func(args, cfg)
     except AstriaError as exc:
