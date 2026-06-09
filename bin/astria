@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 
 def _platform_token():
@@ -971,6 +971,67 @@ def cmd_workspaces_list(args, cfg):
 
 
 # --------------------------------------------------------------------------
+# commands — board (infinite canvas)
+# --------------------------------------------------------------------------
+def _board_id(args, cfg):
+    if getattr(args, "board", None):
+        return int(args.board)
+    return request(cfg, "GET", "/board.json", workspace=args.workspace)["board"]["id"]
+
+
+def _id_list(value):
+    return [int(v) for v in str(value).split(",") if v.strip()] if value else []
+
+
+def cmd_board_get(args, cfg):
+    data = request(cfg, "GET", f"/boards/{_board_id(args, cfg)}.json", workspace=args.workspace)
+    if not args.snapshot:
+        data.get("board", {}).pop("snapshot", None)
+        data.pop("reference_tunes", None)
+    emit(data)
+
+
+def cmd_board_hydrate(args, cfg):
+    query = ([("order_ids[]", i) for i in _id_list(args.orders)]
+             + [("prompt_ids[]", i) for i in _id_list(args.prompts)]
+             + [("tune_ids[]", i) for i in _id_list(args.tunes)])
+    emit(request(cfg, "GET", f"/boards/{_board_id(args, cfg)}/hydrate.json", query=query, workspace=args.workspace))
+
+
+def cmd_board_order(args, cfg):
+    references = []
+    for ref in args.ref or []:
+        if "=" not in ref:
+            die(f"--ref must look like Role=tune:ID (got {ref!r})")
+        role, value = ref.split("=", 1)
+        if value.startswith("tune:"):
+            references.append({"role": role, "tune_id": int(value[5:])})
+        else:
+            die(f"unsupported reference value {value!r} — use tune:ID (create raw-image refs with `astria tunes create` first)")
+    order = {"pack_id": int(args.pack), "references": references}
+    if args.prompts:
+        order["prompt_ids"] = _id_list(args.prompts)
+    if args.brief:
+        order["brief"] = args.brief
+    if args.num_images:
+        order["overrides"] = {"num_images": int(args.num_images)}
+    emit(request(cfg, "POST", f"/boards/{_board_id(args, cfg)}/orders.json", json_body={"order": order},
+                 workspace=args.workspace))
+
+
+def cmd_board_regenerate(args, cfg):
+    body = {"text": args.text}
+    emit(request(cfg, "POST", f"/boards/{_board_id(args, cfg)}/prompts/{args.prompt_id}/regenerate",
+                 json_body=body, workspace=args.workspace))
+
+
+def cmd_board_promote(args, cfg):
+    body = {"detach": True} if args.detach else {}
+    emit(request(cfg, "POST", f"/boards/{_board_id(args, cfg)}/prompts/{args.prompt_id}/promote",
+                 json_body=body, workspace=args.workspace))
+
+
+# --------------------------------------------------------------------------
 # commands — workspace landing page
 # --------------------------------------------------------------------------
 def cmd_landing_get(args, cfg):
@@ -1611,6 +1672,34 @@ def build_parser():
     # workspaces
     workspaces = sub.add_parser("workspaces", help="workspaces").add_subparsers(dest="sub", required=True)
     workspaces.add_parser("list", help="list workspaces").set_defaults(func=cmd_workspaces_list)
+
+    # board — infinite canvas (frames / order rows / reference cards)
+    board_parent = argparse.ArgumentParser(add_help=False, parents=[ws_parent])
+    board_parent.add_argument("--board", help="board id (default: the workspace's board)")
+    board = sub.add_parser("board", help="infinite-canvas board (frames, order rows, references)").add_subparsers(dest="sub", required=True)
+    p = board.add_parser("get", parents=[board_parent], help="board bootstrap: packs, roles, generation models")
+    p.add_argument("--snapshot", action="store_true", help="include the raw tldraw snapshot")
+    p.set_defaults(func=cmd_board_get)
+    p = board.add_parser("hydrate", parents=[board_parent], help="fetch orders/prompts/tunes referenced on the board")
+    p.add_argument("--orders", help="comma-separated order ids")
+    p.add_argument("--prompts", help="comma-separated prompt ids")
+    p.add_argument("--tunes", help="comma-separated tune ids")
+    p.set_defaults(func=cmd_board_hydrate)
+    p = board.add_parser("order", parents=[board_parent], help="create a row: an order from a pack with swapped references")
+    p.add_argument("--pack", required=True, help="pack id")
+    p.add_argument("--ref", action="append", help="Role=tune:ID (repeatable) — e.g. Face=tune:123")
+    p.add_argument("--prompts", help="template prompt id subset, comma-separated")
+    p.add_argument("--brief", help="mood/art-direction brief applied to all template prompts")
+    p.add_argument("--num-images", help="images per prompt")
+    p.set_defaults(func=cmd_board_order)
+    p = board.add_parser("regenerate", parents=[board_parent], help="variant of a prompt with edited text (stacks on its cell)")
+    p.add_argument("prompt_id")
+    p.add_argument("--text", required=True)
+    p.set_defaults(func=cmd_board_regenerate)
+    p = board.add_parser("promote", parents=[board_parent], help="apply a prompt back to its pack template (or --detach)")
+    p.add_argument("prompt_id")
+    p.add_argument("--detach", action="store_true", help="clear orig_prompt_id instead of promoting")
+    p.set_defaults(func=cmd_board_promote)
 
     # landing page
     landing = sub.add_parser("landing", help="workspace landing page").add_subparsers(dest="sub", required=True)

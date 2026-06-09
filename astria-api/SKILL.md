@@ -223,6 +223,22 @@ astria packs create --title "Spring Lookbook"
 astria prompts update 555 --model nano-banana-pro --pack-id 88   # add a prompt to the pack
 ```
 
+## Board (infinite canvas)
+
+The board (`/boards/:id` in the GUI) organizes work as **frames** (a pack-bound working context), **order rows** (one Order = a line of prompts sharing one reference set) and **reference cards** (tunes with lookbook roles: Pose, Face, Accessories, Jacket, Top, Bags & Belts, Footwear, Bottom, Background). Shapes the user arranges are client-owned — the API acts on domain objects and the canvas updates live.
+
+```bash
+astria board get                                     # bootstrap: packs, lookbook roles, models (add --snapshot for raw tldraw doc)
+astria board hydrate --orders 901 --prompts 7001     # statuses, texts, image urls for board objects
+astria board order --pack 88 --ref Face=tune:123 --ref Top=tune:456 \
+    --prompts 501,502 --brief "golden hour, Lisbon"  # new row: clone templates with swapped refs
+astria board regenerate 7001 --text "..."            # variant with edited text (stacks as a version on its cell)
+astria board promote 7001                            # apply the prompt back to the pack template (confirm with the user first)
+astria board promote 7001 --detach                   # stop tracking the template instead
+```
+
+Raw-image references: create an instant Gemini reference first (`astria tunes create --branch gemini ...`), then pass it as `--ref Role=tune:ID`.
+
 ## Workspaces & landing pages
 
 ```bash
