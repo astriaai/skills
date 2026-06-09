@@ -17,6 +17,7 @@ import argparse
 import ast
 import json
 import os
+import platform
 import re
 import shutil
 import sqlite3
@@ -30,6 +31,13 @@ from urllib.parse import urlencode, urlparse
 VERSION = "1.1.0"
 
 
+def _platform_token():
+    system = platform.system() or sys.platform
+    machine = platform.machine()
+    release = platform.release()
+    return "; ".join(part for part in [system, release, machine] if part)
+
+
 def _client_token():
     """Identify the host environment for the User-Agent comment — an explicit
     ASTRIA_CLIENT override, else the generic AI_AGENT marker, else Claude Code."""
@@ -41,10 +49,16 @@ def _client_token():
     return "".join(c for c in val if c.isalnum() or c in " ._/-")[:80]
 
 
-USER_AGENT = f"astria-cli/{VERSION}"
-_client = _client_token()
-if _client:
-    USER_AGENT += f" ({_client})"
+def _user_agent():
+    comment = "; ".join(part for part in [
+        _platform_token(),
+        f"Python/{platform.python_version()}",
+        _client_token(),
+    ] if part)
+    return f"astria-cli/{VERSION} ({comment})"
+
+
+USER_AGENT = _user_agent()
 DEFAULT_BASE_URL = "https://api.astria.ai"
 UPGRADE_URL = "https://raw.githubusercontent.com/astriaai/cli/main/astria"
 
@@ -559,7 +573,7 @@ def cmd_upgrade(args, cfg):
     current = _version_tuple(VERSION)
 
     try:
-        proc = subprocess.run(["curl", "-fsSL", url], capture_output=True)
+        proc = subprocess.run(["curl", "-fsSL", "-A", USER_AGENT, url], capture_output=True)
     except FileNotFoundError:
         die("`curl` not found on PATH — install curl")
     if proc.returncode != 0:
@@ -1176,7 +1190,7 @@ def collect_prompt_ids(args):
 
 def download_asset(url, dest):
     """Fetch one asset URL to dest with curl. Raises AstriaError on failure."""
-    argv = ["curl", "-sSL", "--fail", "--max-time", "120", "-o", str(dest), url]
+    argv = ["curl", "-sSL", "--fail", "--max-time", "120", "-A", USER_AGENT, "-o", str(dest), url]
     try:
         proc = subprocess.run(argv, capture_output=True)
     except FileNotFoundError:
