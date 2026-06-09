@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 
 def _platform_token():
@@ -213,6 +213,7 @@ def fetch_models(cfg):
         "models": payload["models"],
         "video_models": payload.get("video_models") or {},
         "cli": payload.get("cli") or {},
+        "skills": payload.get("skills") or {},
     }
     try:
         CONFIG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -229,7 +230,79 @@ def _version_tuple(v):
         return None
 
 
-def check_cli_version(record):
+def install_cli_upgrade(url, target, *, force=False):
+    current = _version_tuple(VERSION)
+
+    try:
+        proc = subprocess.run(["curl", "-fsSL", "-A", USER_AGENT, url], capture_output=True)
+    except FileNotFoundError:
+        raise AstriaError("`curl` not found on PATH — install curl")
+    if proc.returncode != 0:
+        raise AstriaError(f"could not download upgrade from {url}: {proc.stderr.decode('utf-8', 'replace').strip()}")
+
+    try:
+        source = proc.stdout.decode("utf-8")
+        ast.parse(source)
+    except (UnicodeDecodeError, SyntaxError) as exc:
+        raise AstriaError(f"downloaded upgrade is not a valid astria CLI script: {exc}")
+
+    new_version = downloaded_cli_version(source)
+    downloaded = _version_tuple(new_version)
+    if current and downloaded and downloaded < current and not force:
+        raise AstriaError(f"refusing to downgrade astria {VERSION} to {new_version}; pass --force to install anyway")
+    if current and downloaded and downloaded == current and not force:
+        return None
+    if not target.is_file():
+        raise AstriaError(f"cannot upgrade {target}: executable file not found")
+    if not os.access(target, os.W_OK):
+        raise AstriaError(f"cannot write {target}; rerun with permissions to update that file")
+
+    tmp = target.with_name(f".{target.name}.upgrade-{os.getpid()}")
+    try:
+        mode = target.stat().st_mode & 0o777
+        tmp.write_bytes(proc.stdout)
+        tmp.chmod(mode or 0o755)
+        os.replace(tmp, target)
+    except OSError as exc:
+        raise AstriaError(f"could not install upgrade at {target}: {exc}")
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+
+    return new_version
+
+
+def auto_upgrade_cli(cli):
+    if os.environ.get("ASTRIA_NO_AUTO_UPGRADE") or os.environ.get("ASTRIA_UPGRADED"):
+        return False
+
+    upgrade = cli.get("upgrade") or "please upgrade the astria CLI"
+    target = current_executable_path()
+    if not target.is_file() or not os.access(target, os.W_OK):
+        print(f"astria: a newer CLI is available ({cli.get('latest_version')}) — {upgrade}", file=sys.stderr)
+        return True
+
+    try:
+        new_version = install_cli_upgrade(cli.get("download_url") or UPGRADE_URL, target)
+    except Exception as exc:
+        print(f"astria: auto-upgrade failed: {exc}; {upgrade}", file=sys.stderr)
+        return True
+
+    if not new_version:
+        return True
+
+    print(f"astria: upgraded {VERSION} -> {new_version}; restarting", file=sys.stderr)
+    os.environ["ASTRIA_UPGRADED"] = "1"
+    try:
+        os.execv(str(target), [str(target)] + sys.argv[1:])
+    except OSError as exc:
+        print(f"astria: restart after auto-upgrade failed: {exc}", file=sys.stderr)
+    return True
+
+
+def check_cli_version(record, *, auto_upgrade=False):
     """Enforce the min/latest CLI version from the cached /cli/models `cli` block:
     below min_version is a hard stop, below latest_version is an upgrade nudge."""
     cli = (record or {}).get("cli") or {}
@@ -242,8 +315,40 @@ def check_cli_version(record):
         die(f"this astria CLI ({VERSION}) is no longer supported — {upgrade}")
     latest = _version_tuple(cli.get("latest_version"))
     if latest and current < latest:
+        if auto_upgrade and auto_upgrade_cli(cli):
+            return
         print(f"astria: a newer CLI is available ({cli.get('latest_version')}) — {upgrade}",
               file=sys.stderr)
+
+
+def installed_skills_version():
+    root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if not root:
+        return None
+    try:
+        data = json.loads((Path(root) / ".claude-plugin" / "plugin.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data.get("version")
+
+
+def skills_upgrade_context(record):
+    current = installed_skills_version()
+    if not current:
+        return None
+
+    skills = (record or {}).get("skills") or {}
+    latest = skills.get("latest_version")
+    current_tuple = _version_tuple(current)
+    latest_tuple = _version_tuple(latest)
+    if not current_tuple or not latest_tuple or current_tuple >= latest_tuple:
+        return None
+
+    upgrade = skills.get("upgrade") or "reinstall the Astria skills plugin from astriaai/skills"
+    return (
+        f"The Astria skills plugin is outdated ({current} < {latest}). "
+        f"If the user asks to do anything with Astria, tell them to {upgrade}."
+    )
 
 
 def downloaded_cli_version(source):
@@ -570,45 +675,10 @@ def cmd_upgrade(args, cfg):
     cli = record.get("cli") or {}
     url = args.url or cli.get("download_url") or UPGRADE_URL
     target = current_executable_path(args.path)
-    current = _version_tuple(VERSION)
-
-    try:
-        proc = subprocess.run(["curl", "-fsSL", "-A", USER_AGENT, url], capture_output=True)
-    except FileNotFoundError:
-        die("`curl` not found on PATH — install curl")
-    if proc.returncode != 0:
-        raise AstriaError(f"could not download upgrade from {url}: {proc.stderr.decode('utf-8', 'replace').strip()}")
-
-    try:
-        source = proc.stdout.decode("utf-8")
-        ast.parse(source)
-    except (UnicodeDecodeError, SyntaxError) as exc:
-        raise AstriaError(f"downloaded upgrade is not a valid astria CLI script: {exc}")
-
-    new_version = downloaded_cli_version(source)
-    downloaded = _version_tuple(new_version)
-    if current and downloaded and downloaded < current and not args.force:
-        die(f"refusing to downgrade astria {VERSION} to {new_version}; pass --force to install anyway")
-    if current and downloaded and downloaded == current and not args.force:
+    new_version = install_cli_upgrade(url, target, force=args.force)
+    if not new_version:
         print(f"astria {VERSION} is already current at {target}")
         return
-    if not target.is_file():
-        die(f"cannot upgrade {target}: executable file not found")
-    if not os.access(target, os.W_OK):
-        die(f"cannot write {target}; rerun with permissions to update that file")
-
-    tmp = target.with_name(f".{target.name}.upgrade-{os.getpid()}")
-    try:
-        mode = target.stat().st_mode & 0o777
-        tmp.write_bytes(proc.stdout)
-        tmp.chmod(mode or 0o755)
-        os.replace(tmp, target)
-    finally:
-        try:
-            tmp.unlink()
-        except FileNotFoundError:
-            pass
-
     print(f"Upgraded astria {VERSION} -> {new_version or 'unknown'} at {target}")
 
 
@@ -1281,19 +1351,26 @@ def cmd_api(args, cfg):
 # --------------------------------------------------------------------------
 def cmd_session_hook(args, cfg):
     # Best-effort: keep the /cli/models id cache warm (daily refresh).
+    record = load_models_cache()
     try:
-        if models_cache_stale(load_models_cache(), cfg):
-            fetch_models(cfg)
+        if models_cache_stale(record, cfg):
+            record = fetch_models(cfg) or record
     except Exception:
         pass
     authed = bool(os.environ.get("ASTRIA_API_KEY") or os.environ.get("ASTRIA_AUTH_TOKEN") or cfg.get("api_key"))
     out = {"hookSpecificOutput": {"hookEventName": "SessionStart"}}
+    context = []
     if not authed:
-        out["hookSpecificOutput"]["additionalContext"] = (
+        context.append(
             "The Astria plugin is installed but not authenticated. If the user asks to do "
             "anything with Astria (generate images, manage tunes/packs), tell them to run "
             f"`astria login` first (API key at {login_hint(cfg)})."
         )
+    skills_context = skills_upgrade_context(record)
+    if skills_context:
+        context.append(skills_context)
+    if context:
+        out["hookSpecificOutput"]["additionalContext"] = "\n\n".join(context)
     emit(out)
 
 
@@ -1615,7 +1692,7 @@ def main():
     apply_profile(resolve_profile(args.profile))
     cfg = load_config()
     if args.command != "upgrade":
-        check_cli_version(load_models_cache())
+        check_cli_version(load_models_cache(), auto_upgrade=True)
     try:
         args.func(args, cfg)
     except AstriaError as exc:
