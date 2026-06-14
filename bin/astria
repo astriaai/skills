@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 
 def _platform_token():
@@ -778,10 +778,12 @@ def cmd_prompts_update(args, cfg):
     form = []
     if args.pack_id:
         form.append(field("prompt[pack_id]", args.pack_id))
+    if args.base_pack_id:
+        form.append(field("prompt[base_pack_id]", args.base_pack_id))
     if args.workspace_id:
         form.append(field("prompt[workspace_id]", args.workspace_id))
     if not form:
-        die("nothing to update — pass --pack-id or --workspace-id")
+        die("nothing to update — pass --pack-id, --base-pack-id or --workspace-id")
     emit(request(cfg, "PATCH", f"/tunes/{tune_id}/prompts/{args.id}", form=form, workspace=args.workspace))
 
 
@@ -892,6 +894,10 @@ def _generate(args, cfg, video):
     form.append(field("prompt[num_images]", num_images))
     if getattr(args, "seed", None):
         form.append(field("prompt[seed]", args.seed))
+    if getattr(args, "pack_id", None):
+        form.append(field("prompt[pack_id]", args.pack_id))
+    if getattr(args, "base_pack", None):
+        form.append(field("prompt[base_pack_id]", args.base_pack))
     if args.aspect_ratio:
         form.append(field("prompt[aspect_ratio]", args.aspect_ratio))
     if getattr(args, "resolution", None):
@@ -1575,6 +1581,7 @@ def build_parser():
     p.add_argument("--tune", help="tune id the prompt belongs to")
     p.add_argument("--model", help="model name instead of --tune")
     p.add_argument("--pack-id")
+    p.add_argument("--base-pack-id", help="bind to a pack as a one-off (places it in the pack's board frame)")
     p.add_argument("--workspace-id")
     p.set_defaults(func=cmd_prompts_update)
     p = prompts.add_parser("wait", parents=[ws_parent],
@@ -1608,6 +1615,9 @@ def build_parser():
     p.add_argument("--mask-image", help="URL or local file to use as an inpainting mask")
     p.add_argument("--images", action="append", metavar="NAME=PATH_OR_URL",
                    help="Attach reference image. Name is the main subject class, for example: man, woman, shoes, outfit, shirt, background, style")
+    p.add_argument("--pack-id", help="author the prompt as a pack template prompt")
+    p.add_argument("--base-pack", metavar="PACK_ID",
+                   help="bind the generation to a pack as a one-off — on the board it lands in that pack's frame")
     p.add_argument("--wait", action="store_true", help="block until images are ready")
     p.set_defaults(func=cmd_generate)
 
@@ -1645,6 +1655,8 @@ def build_parser():
                    help=video_capability_help(
                        models_record, "generates_audio",
                        "generate a soundtrack; omit to use the model default"))
+    p.add_argument("--base-pack", metavar="PACK_ID",
+                   help="bind the generation to a pack as a one-off — on the board it lands in that pack's frame")
     p.add_argument("--wait", action="store_true")
     p.set_defaults(func=cmd_video)
 

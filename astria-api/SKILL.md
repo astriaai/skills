@@ -112,6 +112,7 @@ astria prompts list --today --limit 100        # prompts created today
 astria prompts list --text "white background" --limit 100 --offset 0
 astria prompts get 555 --model nano-banana-pro       # one prompt (needs its tune/model)
 astria prompts update 555 --model nano-banana-pro --pack-id 88   # assign a prompt to a pack
+astria prompts update 555 --model nano-banana-pro --base-pack-id 88   # bind as a pack one-off (board frame)
 ```
 
 - `prompts list` filters: `--pack-id`, `--base-pack-id`, `--tune-id`,
@@ -125,10 +126,14 @@ astria generate --text "<faceid:123:1> woman, clean white studio background"
 astria generate --model nano-banana-pro --text "..." --num-images 4 --aspect-ratio 3:4 --resolution 2K
 astria generate --model seedream --text "product photo of headphones on marble" --num-images 2
 astria generate --text "recreate this in 4K" --input-image https://example.com/photo.jpg
-astria generate --text "..." --pack-id 88 --wait     # assign to pack, block until ready
+astria generate --text "..." --pack-id 88 --wait     # author a pack template prompt, block until ready
+astria generate --text "..." --base-pack 88          # one-off bound to pack 88 — lands in its board frame
 ```
 
 - `--input-image` accepts a URL or a local file path (used for image editing/upscaling).
+- `--pack-id` authors the prompt as a pack **template** prompt; `--base-pack`
+  records pack provenance only (a one-off). On the board, `--base-pack`
+  generations appear as free rows inside that pack's frame.
 - `--wait` polls until the images are ready and prints the finished prompt JSON.
   Without it, the command returns immediately — images render asynchronously.
 - `aspect_ratio` values: `1:1 16:9 9:16 21:9 9:21 3:2 2:3 5:4 4:5 4:3`.
@@ -235,6 +240,7 @@ astria board order --pack 88 --ref Face=tune:123 --ref Top=tune:456 \
 astria board regenerate 7001 --text "..."            # variant with edited text (stacks as a version on its cell)
 astria board promote 7001                            # apply the prompt back to the pack template (confirm with the user first)
 astria board promote 7001 --detach                   # stop tracking the template instead
+astria generate --text "..." --base-pack 88          # one-off into pack 88's frame (free row, not a template)
 ```
 
 Raw-image references: create an instant Gemini reference first (`astria tunes create --branch gemini ...`), then pass it as `--ref Role=tune:ID`.
