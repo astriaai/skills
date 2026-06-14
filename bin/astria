@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 
 
 def _platform_token():
@@ -746,7 +746,7 @@ def cmd_tunes_update(args, cfg):
 # --------------------------------------------------------------------------
 def cmd_prompts_list(args, cfg):
     query = []
-    for key in ("text", "pack_id", "base_pack_id", "tune_id", "user_id", "orig_prompt_id"):
+    for key in ("text", "pack_id", "base_pack_id", "tune_id", "user_id", "orig_prompt_id", "order_id"):
         value = getattr(args, key, None)
         if value:
             query.append((key, value))
@@ -761,7 +761,7 @@ def cmd_prompts_list(args, cfg):
         query.append(("offset", args.offset))
     path = f"/tunes/{args.tune_id}/prompts" if args.tune_id else "/prompts"
     prompts = request(cfg, "GET", path, query=query, workspace=args.workspace)
-    keys = ["id", "text", "num_images", "images", "aspect_ratio", "resolution", "pack_id", "tune_id"]
+    keys = ["id", "text", "num_images", "images", "aspect_ratio", "resolution", "pack_id", "tune_id", "order_id"]
     if args.expand:
         keys += ["debug_images", "debug_filenames", "debug_content_types"]
     emit([{k: p.get(k) for k in keys} for p in prompts])
@@ -894,10 +894,6 @@ def _generate(args, cfg, video):
     form.append(field("prompt[num_images]", num_images))
     if getattr(args, "seed", None):
         form.append(field("prompt[seed]", args.seed))
-    if getattr(args, "pack_id", None):
-        form.append(field("prompt[pack_id]", args.pack_id))
-    if getattr(args, "base_pack", None):
-        form.append(field("prompt[base_pack_id]", args.base_pack))
     if args.aspect_ratio:
         form.append(field("prompt[aspect_ratio]", args.aspect_ratio))
     if getattr(args, "resolution", None):
@@ -1074,7 +1070,7 @@ def cmd_landing_set(args, cfg):
 # --------------------------------------------------------------------------
 CACHE_FIELDS = {
     "tunes": ("id", "title", "name", "orig_images"),
-    "prompts": ("id", "text", "num_images", "images", "aspect_ratio", "resolution", "input_image", "input_video"),
+    "prompts": ("id", "text", "num_images", "images", "aspect_ratio", "resolution", "input_image", "input_video", "order_id"),
     "packs": ("id", "title", "slug", "main_class_name", "multiplier", "multiplier_api"),
     "user": ("usd_balance_mc", "email", "name", "purchased_plugin_at"),
 }
@@ -1093,7 +1089,7 @@ def cache_dir(cfg, override):
 # the columns `astria cache get/find/uses` query against — no API calls.
 DB_COLUMNS = {
     "tunes": ("id", "name", "title"),
-    "prompts": ("id", "text", "pack_id", "tune_id", "num_images", "aspect_ratio", "resolution"),
+    "prompts": ("id", "text", "pack_id", "tune_id", "order_id", "num_images", "aspect_ratio", "resolution"),
     "packs": ("id", "title", "slug", "main_class_name"),
 }
 CACHE_DB_NAME = "cache.db"
@@ -1235,7 +1231,7 @@ def cmd_cache_find(args, cfg):
     # filter -> (column, mode): 'eq' for exact match, 'like' for substring
     filters = {
         "tunes": {"name": ("name", "like"), "title": ("title", "like")},
-        "prompts": {"pack_id": ("pack_id", "eq"), "tune_id": ("tune_id", "eq"),
+        "prompts": {"pack_id": ("pack_id", "eq"), "tune_id": ("tune_id", "eq"), "order_id": ("order_id", "eq"),
                     "text": ("text", "like")},
         "packs": {"main_class": ("main_class_name", "like"), "title": ("title", "like")},
     }[args.table]
@@ -1557,6 +1553,7 @@ def build_parser():
     p.add_argument("--tune-id", help="scope to one tune's prompts")
     p.add_argument("--pack-id", help="template prompts owned by a pack")
     p.add_argument("--base-pack-id", help="prompts generated from a pack")
+    p.add_argument("--order-id", help="prompts generated for one order")
     p.add_argument("--user-id")
     p.add_argument("--orig-prompt-id", help="prompts cloned from this prompt id")
     p.add_argument("--text", help="filter by prompt text substring")
@@ -1580,8 +1577,8 @@ def build_parser():
     p.add_argument("id")
     p.add_argument("--tune", help="tune id the prompt belongs to")
     p.add_argument("--model", help="model name instead of --tune")
-    p.add_argument("--pack-id")
-    p.add_argument("--base-pack-id", help="bind to a pack as a one-off (places it in the pack's board frame)")
+    p.add_argument("--pack-id", help="assign as a pack template prompt")
+    p.add_argument("--base-pack-id", help="bind as a pack one-off (board frame)")
     p.add_argument("--workspace-id")
     p.set_defaults(func=cmd_prompts_update)
     p = prompts.add_parser("wait", parents=[ws_parent],
@@ -1615,9 +1612,6 @@ def build_parser():
     p.add_argument("--mask-image", help="URL or local file to use as an inpainting mask")
     p.add_argument("--images", action="append", metavar="NAME=PATH_OR_URL",
                    help="Attach reference image. Name is the main subject class, for example: man, woman, shoes, outfit, shirt, background, style")
-    p.add_argument("--pack-id", help="author the prompt as a pack template prompt")
-    p.add_argument("--base-pack", metavar="PACK_ID",
-                   help="bind the generation to a pack as a one-off — on the board it lands in that pack's frame")
     p.add_argument("--wait", action="store_true", help="block until images are ready")
     p.set_defaults(func=cmd_generate)
 
@@ -1655,8 +1649,6 @@ def build_parser():
                    help=video_capability_help(
                        models_record, "generates_audio",
                        "generate a soundtrack; omit to use the model default"))
-    p.add_argument("--base-pack", metavar="PACK_ID",
-                   help="bind the generation to a pack as a one-off — on the board it lands in that pack's frame")
     p.add_argument("--wait", action="store_true")
     p.set_defaults(func=cmd_video)
 
@@ -1753,6 +1745,7 @@ def build_parser():
     f = find_sub.add_parser("prompts", parents=[ws_parent], help="find prompts by pack / tune / text")
     f.add_argument("--pack-id", dest="pack_id", help="exact pack id")
     f.add_argument("--tune-id", dest="tune_id", help="exact tune id")
+    f.add_argument("--order-id", dest="order_id", help="exact order id")
     f.add_argument("--text", help="prompt text substring filter")
     f.set_defaults(func=cmd_cache, action="find", resource=None, force=False)
     f = find_sub.add_parser("packs", parents=[ws_parent], help="find packs by main-class / title")
