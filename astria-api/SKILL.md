@@ -240,6 +240,7 @@ astria board order --pack 88 --ref Face=tune:123 --ref Top=tune:456 \
 astria board regenerate 7001 --text "..."            # variant with edited text (stacks as a version on its cell)
 astria board promote 7001                            # apply the prompt back to the pack template (confirm with the user first)
 astria board promote 7001 --detach                   # stop tracking the template instead
+astria board demote 7001                             # take a template prompt back out of its pack (stays in the frame)
 astria generate --text "..." --base-pack 88          # one-off into pack 88's frame (free row, not a template)
 ```
 
