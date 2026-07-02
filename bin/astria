@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.6.1"
+VERSION = "1.7.0"
 
 
 def _platform_token():
@@ -1029,15 +1029,34 @@ def cmd_board_regenerate(args, cfg):
                  query=[("view", "board")], json_body={"prompt": prompt}, workspace=args.workspace))
 
 
+def _board_prompt(args, cfg):
+    hydrated = request(cfg, "GET", "/board/hydrate.json",
+                       query=[("prompt_ids[]", args.prompt_id), ("skip_recents", 1)], workspace=args.workspace)
+    prompts = hydrated.get("prompts") or []
+    return prompts[0] if prompts else {}
+
+
 def cmd_board_promote(args, cfg):
-    body = {"detach": True} if args.detach else {}
-    emit(request(cfg, "POST", f"/prompts/{args.prompt_id}/promote_to_template",
+    # Template membership is a plain pack_id write. Promote assigns the pack
+    # the look is bound to (its frame's pack); --detach just clears the
+    # template-tracking lineage.
+    if args.detach:
+        body = {"prompt": {"orig_prompt_id": None}}
+    else:
+        target_pack_id = _board_prompt(args, cfg).get("base_pack_id")
+        if not target_pack_id:
+            die("prompt is not bound to a pack frame (no base_pack_id) — nothing to promote into")
+        body = {"prompt": {"pack_id": target_pack_id, "base_pack_id": None, "orig_prompt_id": None}}
+    emit(request(cfg, "PATCH", f"/prompts/{args.prompt_id}",
                  query=[("view", "board")], json_body=body, workspace=args.workspace))
 
 
 def cmd_board_demote(args, cfg):
-    emit(request(cfg, "POST", f"/prompts/{args.prompt_id}/demote_from_template",
-                 query=[("view", "board")], workspace=args.workspace))
+    # Clear pack_id; base_pack_id keeps the prompt bound to the pack's frame.
+    prompt = _board_prompt(args, cfg)
+    body = {"prompt": {"pack_id": None, "base_pack_id": prompt.get("base_pack_id") or prompt.get("pack_id")}}
+    emit(request(cfg, "PATCH", f"/prompts/{args.prompt_id}",
+                 query=[("view", "board")], json_body=body, workspace=args.workspace))
 
 
 # --------------------------------------------------------------------------
