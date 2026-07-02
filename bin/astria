@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.6.0"
+VERSION = "1.6.1"
 
 
 def _platform_token():
@@ -1016,9 +1016,17 @@ def cmd_board_order(args, cfg):
 
 
 def cmd_board_regenerate(args, cfg):
-    body = {"text": args.text}
-    emit(request(cfg, "POST", f"/board/prompts/{args.prompt_id}/regenerate",
-                 json_body=body, workspace=args.workspace))
+    # Classic duplicate; the variant joins its source's order (same row), so
+    # fetch the source's order_id first.
+    hydrated = request(cfg, "GET", "/board/hydrate.json",
+                       query=[("prompt_ids[]", args.prompt_id), ("skip_recents", 1)], workspace=args.workspace)
+    prompts = hydrated.get("prompts") or []
+    order_id = prompts[0].get("order_id") if prompts else None
+    prompt = {"text": args.text}
+    if order_id:
+        prompt["order_id"] = order_id
+    emit(request(cfg, "POST", f"/prompts/{args.prompt_id}/duplicate",
+                 query=[("view", "board")], json_body={"prompt": prompt}, workspace=args.workspace))
 
 
 def cmd_board_promote(args, cfg):
