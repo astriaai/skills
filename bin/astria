@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 
 
 def _platform_token():
@@ -975,18 +975,12 @@ def cmd_workspaces_list(args, cfg):
 # --------------------------------------------------------------------------
 # commands — board (infinite canvas)
 # --------------------------------------------------------------------------
-def _board_id(args, cfg):
-    if getattr(args, "board", None):
-        return int(args.board)
-    return request(cfg, "GET", "/board.json", workspace=args.workspace)["board"]["id"]
-
-
 def _id_list(value):
     return [int(v) for v in str(value).split(",") if v.strip()] if value else []
 
 
 def cmd_board_get(args, cfg):
-    data = request(cfg, "GET", f"/boards/{_board_id(args, cfg)}.json", workspace=args.workspace)
+    data = request(cfg, "GET", "/board.json", workspace=args.workspace)
     if not args.snapshot:
         data.get("board", {}).pop("snapshot", None)
         data.pop("reference_tunes", None)
@@ -997,7 +991,7 @@ def cmd_board_hydrate(args, cfg):
     query = ([("order_ids[]", i) for i in _id_list(args.orders)]
              + [("prompt_ids[]", i) for i in _id_list(args.prompts)]
              + [("tune_ids[]", i) for i in _id_list(args.tunes)])
-    emit(request(cfg, "GET", f"/boards/{_board_id(args, cfg)}/hydrate.json", query=query, workspace=args.workspace))
+    emit(request(cfg, "GET", "/board/hydrate.json", query=query, workspace=args.workspace))
 
 
 def cmd_board_order(args, cfg):
@@ -1017,20 +1011,25 @@ def cmd_board_order(args, cfg):
         order["brief"] = args.brief
     if args.num_images:
         order["overrides"] = {"num_images": int(args.num_images)}
-    emit(request(cfg, "POST", f"/boards/{_board_id(args, cfg)}/orders.json", json_body={"order": order},
+    emit(request(cfg, "POST", "/board/orders.json", json_body={"order": order},
                  workspace=args.workspace))
 
 
 def cmd_board_regenerate(args, cfg):
     body = {"text": args.text}
-    emit(request(cfg, "POST", f"/boards/{_board_id(args, cfg)}/prompts/{args.prompt_id}/regenerate",
+    emit(request(cfg, "POST", f"/board/prompts/{args.prompt_id}/regenerate",
                  json_body=body, workspace=args.workspace))
 
 
 def cmd_board_promote(args, cfg):
     body = {"detach": True} if args.detach else {}
-    emit(request(cfg, "POST", f"/boards/{_board_id(args, cfg)}/prompts/{args.prompt_id}/promote",
-                 json_body=body, workspace=args.workspace))
+    emit(request(cfg, "POST", f"/prompts/{args.prompt_id}/promote_to_template",
+                 query=[("view", "board")], json_body=body, workspace=args.workspace))
+
+
+def cmd_board_demote(args, cfg):
+    emit(request(cfg, "POST", f"/prompts/{args.prompt_id}/demote_from_template",
+                 query=[("view", "board")], workspace=args.workspace))
 
 
 # --------------------------------------------------------------------------
@@ -1679,7 +1678,6 @@ def build_parser():
 
     # board — infinite canvas (frames / order rows / reference cards)
     board_parent = argparse.ArgumentParser(add_help=False, parents=[ws_parent])
-    board_parent.add_argument("--board", help="board id (default: the workspace's board)")
     board = sub.add_parser("board", help="infinite-canvas board (frames, order rows, references)").add_subparsers(dest="sub", required=True)
     p = board.add_parser("get", parents=[board_parent], help="board bootstrap: packs, roles, generation models")
     p.add_argument("--snapshot", action="store_true", help="include the raw tldraw snapshot")
@@ -1704,6 +1702,9 @@ def build_parser():
     p.add_argument("prompt_id")
     p.add_argument("--detach", action="store_true", help="clear orig_prompt_id instead of promoting")
     p.set_defaults(func=cmd_board_promote)
+    p = board.add_parser("demote", parents=[board_parent], help="take a template prompt back out of its pack (stays in the frame)")
+    p.add_argument("prompt_id")
+    p.set_defaults(func=cmd_board_demote)
 
     # landing page
     landing = sub.add_parser("landing", help="workspace landing page").add_subparsers(dest="sub", required=True)
