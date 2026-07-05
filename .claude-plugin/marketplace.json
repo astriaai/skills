@@ -29,6 +29,7 @@
         { "name": "navigation", "path": "navigation", "invoke": "/astria:navigation" },
         { "name": "landing-page-editor", "path": "landing-page-editor", "invoke": "/astria:landing-page-editor" },
         { "name": "templatize-page", "path": "templatize-page", "invoke": "/astria:templatize-page" },
+        { "name": "store-photoshoot", "path": "store-photoshoot", "invoke": "/astria:store-photoshoot" },
         { "name": "artboard", "path": "artboard", "invoke": "/astria:artboard" }
       ]
     }
