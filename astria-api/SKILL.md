@@ -254,6 +254,7 @@ Raw-image references: create an instant Gemini reference first (`astria tunes cr
 
 ```bash
 astria workspaces list
+astria workspaces create --title "Acme Store"   # new workspace → returns its id/slug
 astria landing get -w 42                        # workspace JSON incl. landing_page_html
 astria landing set -w 42 --html-file ./edited.html
 ```
