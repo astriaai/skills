@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.8.0"
+VERSION = "1.9.0"
 
 
 def _platform_token():
@@ -976,6 +976,11 @@ def cmd_workspaces_list(args, cfg):
     emit([{k: w.get(k) for k in ("id", "title", "slug")} for w in workspaces])
 
 
+def cmd_workspaces_create(args, cfg):
+    payload = {"workspace": {"title": args.title}}
+    emit(request(cfg, "POST", "/workspaces.json", json_body=payload, no_workspace=True))
+
+
 # --------------------------------------------------------------------------
 # commands — board (infinite canvas)
 # --------------------------------------------------------------------------
@@ -1708,6 +1713,9 @@ def build_parser():
     # workspaces
     workspaces = sub.add_parser("workspaces", help="workspaces").add_subparsers(dest="sub", required=True)
     workspaces.add_parser("list", help="list workspaces").set_defaults(func=cmd_workspaces_list)
+    wc = workspaces.add_parser("create", help="create a workspace")
+    wc.add_argument("--title", required=True)
+    wc.set_defaults(func=cmd_workspaces_create)
 
     # board — infinite canvas (frames / order rows / reference cards)
     board_parent = argparse.ArgumentParser(add_help=False, parents=[ws_parent])
