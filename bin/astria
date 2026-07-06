@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.7.0"
+VERSION = "1.8.0"
 
 
 def _platform_token():
@@ -904,6 +904,10 @@ def _generate(args, cfg, video):
     if getattr(args, "mask_image", None):
         key, value = media_field("prompt[mask_image]", args.mask_image)
         form.append(field(key, value))
+    if getattr(args, "pack_id", None):
+        form.append(field("prompt[pack_id]", args.pack_id))
+    if getattr(args, "base_pack_id", None):
+        form.append(field("prompt[base_pack_id]", args.base_pack_id))
     if video:
         form.append(field("prompt[video_model]", args.video_model))
         form.append(field("prompt[video_prompt]",
@@ -1638,6 +1642,8 @@ def build_parser():
     p.add_argument("--mask-image", help="URL or local file to use as an inpainting mask")
     p.add_argument("--images", action="append", metavar="NAME=PATH_OR_URL",
                    help="Attach reference image. Name is the main subject class, for example: man, woman, shoes, outfit, shirt, background, style")
+    p.add_argument("--pack-id", help="author the prompt as a pack template prompt")
+    p.add_argument("--base-pack-id", help="bind as a pack one-off (lands in the pack's board frame)")
     p.add_argument("--wait", action="store_true", help="block until images are ready")
     p.set_defaults(func=cmd_generate)
 
