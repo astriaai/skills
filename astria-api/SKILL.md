@@ -272,6 +272,39 @@ This differs from `astria board order`, which clones a pack's templates onto
 **lookbook roles** (Face, Top, Footwear…) as a board row. `packs run` is the
 plain pack-generation endpoint; `board order` is the infinite-canvas flow below.
 
+#### Worked example — a multi pack, step by step
+
+`/p/zara-pants` is a public **multi pack**: it composes several references (here,
+one garment tune per slot) into a single shoot, so you train a tune per garment
+and then run the pack against all of them by id. Scope every step to a
+workspace with `-w` (find yours with `astria workspaces list`).
+
+```bash
+# 1. Train a tune for the shirt (4–20 photos of the garment)
+astria tunes create -w 42 --name shirt --title "Linen shirt" \
+  --image ./shirt-1.jpg --image ./shirt-2.jpg --image ./shirt-3.jpg
+# → { "id": 5001, ... }
+
+# 2. Train a SEPARATE tune for the pants
+astria tunes create -w 42 --name pants --title "Wide-leg pants" \
+  --image ./pants-1.jpg --image ./pants-2.jpg --image ./pants-3.jpg
+# → { "id": 5002, ... }
+
+# 3. Run the pack against both tunes — one --tune-id per reference
+astria packs run zara-pants -w 42 --tune-id 5001 --tune-id 5002 \
+  --brief "editorial studio, soft daylight" --aspect-ratio 3:4
+# → { "status": 201, "order": {...}, "prompt_ids": [7001, 7002, ...] }
+
+# 4. Fetch the results (the order hands back the prompt ids)
+astria board hydrate -w 42 --prompts 7001,7002    # statuses + image urls
+astria download 7001 7002 --out ./zara-pants-shoot
+```
+
+Steps 1–2 return the tune ids immediately; the pack's prompts queue and render
+once those tunes finish training. Pass one `--tune-id` per reference slot the
+pack defines — a multi pack needs at least one, and rejects the run (422) if
+you send none.
+
 ## Board (infinite canvas)
 
 The board (`/boards/:id` in the GUI) organizes work as **frames** (a pack-bound working context), **order rows** (one Order = a line of prompts sharing one reference set) and **reference cards** (tunes with lookbook roles: Pose, Face, Accessories, Jacket, Top, Bags & Belts, Footwear, Bottom, Background). Shapes the user arranges are client-owned — the API acts on domain objects and the canvas updates live.
