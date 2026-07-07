@@ -234,10 +234,12 @@ astria prompts update 555 --model nano-banana-pro --pack-id 88   # add a prompt 
 
 ### Run a pack
 
-`astria packs run <slug>` fires a pack's template prompts — `POST /p/:slug/tunes`.
-This is the canonical "run a template": the pack generates its whole prompt set,
-either against **tunes you already have** or against a **fresh tune trained from
-photos**.
+`astria packs run <slug|id>` fires a pack's template prompts —
+`POST /p/:slug/tunes`. This is the canonical "run a template": the pack
+generates its whole prompt set, either against **tunes you already have** or
+against a **fresh tune trained from photos**. The positional accepts either the
+pack **slug** or its numeric **id** — `astria packs run zara-pants …` and
+`astria packs run 3893 …` are equivalent.
 
 ```bash
 # multi packs — run against existing tunes (tune_ids), with overrides
@@ -264,9 +266,10 @@ astria packs run my-pack --title Jane --name woman \
   `--aspect-ratio`, `--resolution`, `--inpaint-faces/--no-inpaint-faces`, and
   `--attr KEY=VALUE` (repeatable) for any other prompt attribute, e.g.
   `--attr super_resolution=true`.
-- The `<slug>` is the pack slug or id. On a multi pack the JSON response
-  includes the new `order` and its `prompt_ids` — feed those to
-  `astria download` (or `astria board hydrate --prompts …`) to fetch the images.
+- The positional is the pack **slug or numeric id** — both resolve to the same
+  `/p/:slug/tunes` endpoint. On a multi pack the JSON response includes the new
+  `order` and its `prompt_ids` — feed those to `astria download` (or
+  `astria board hydrate --prompts …`) to fetch the images.
 
 This differs from `astria board order`, which clones a pack's templates onto
 **lookbook roles** (Face, Top, Footwear…) as a board row. `packs run` is the
@@ -274,36 +277,44 @@ plain pack-generation endpoint; `board order` is the infinite-canvas flow below.
 
 #### Worked example — a multi pack, step by step
 
-`/p/zara-pants` is a public **multi pack**: it composes several references (here,
-one garment tune per slot) into a single shoot, so you train a tune per garment
-and then run the pack against all of them by id. Scope every step to a
-workspace with `-w` (find yours with `astria workspaces list`).
+`zara-boot-test` (id `4001`) is a **multi pack** that composes two references —
+a `dress` and a `shoes` (Footwear) — into one shoot. Create a reference per
+garment, then run the pack against both by id. Scope every step to a workspace
+with `-w` (find yours with `astria workspaces list`).
 
 ```bash
-# 1. Train a tune for the shirt (4–20 photos of the garment)
-astria tunes create -w 42 --name shirt --title "Linen shirt" \
-  --image ./shirt-1.jpg --image ./shirt-2.jpg --image ./shirt-3.jpg
-# → { "id": 5001, ... }
+# 1. Create a reference for the dress (Gemini branch — instant, no training wait)
+astria tunes create -w 679 --name dress --title "Zara dress" --image ./dress.jpg
+# → { "id": 5234832, "branch": "gemini-2", "trained_at": "..." }
 
-# 2. Train a SEPARATE tune for the pants
-astria tunes create -w 42 --name pants --title "Wide-leg pants" \
-  --image ./pants-1.jpg --image ./pants-2.jpg --image ./pants-3.jpg
-# → { "id": 5002, ... }
+# 2. Create a SEPARATE reference for the boots.
+#    Use a class the pack's slot recognizes: 'boots' (like 'shoes'/'sandals')
+#    resolves to the Footwear cube, so it fills the pack's shoes slot.
+astria tunes create -w 679 --name boots --title "Zara boots" --image ./boot.jpg
+# → { "id": 5234834, "branch": "gemini-2", "trained_at": "..." }
 
-# 3. Run the pack against both tunes — one --tune-id per reference
-astria packs run zara-pants -w 42 --tune-id 5001 --tune-id 5002 \
-  --brief "editorial studio, soft daylight" --aspect-ratio 3:4
-# → { "status": 201, "order": {...}, "prompt_ids": [7001, 7002, ...] }
+# 3. Run the pack against both references — one --tune-id each.
+#    'zara-boot-test' or its id '4001' are interchangeable here.
+astria packs run zara-boot-test -w 679 \
+  --tune-id 5234832 --tune-id 5234834 --num-images 1 --aspect-ratio 3:4
+# → { "status": 201, "order": { "id": 37345, "tune_ids": [5234834, 5234832] },
+#     "prompt_ids": [45042524, 45042523] }
 
 # 4. Fetch the results (the order hands back the prompt ids)
-astria board hydrate -w 42 --prompts 7001,7002    # statuses + image urls
-astria download 7001 7002 --out ./zara-pants-shoot
+astria board hydrate -w 679 --prompts 45042524,45042523   # statuses + image urls
+astria download 45042524 45042523 --out ./zara-boot-shoot
 ```
 
-Steps 1–2 return the tune ids immediately; the pack's prompts queue and render
-once those tunes finish training. Pass one `--tune-id` per reference slot the
-pack defines — a multi pack needs at least one, and rejects the run (422) if
-you send none.
+The pack swaps each reference into the matching template slot by lookbook cube,
+so the generated prompts come back with both tokens recorded, e.g.
+`a model wearing <faceid:5234832:1.0> dress and <faceid:5234834:1.0> boots, …`
+(and the shoes-only template gets just the boots token). The overrides land as
+prompt attributes (`aspect_ratio: 3:4`, `num_images: 1`).
+
+Gemini-branch references (step 1–2) are ready instantly; a pack built on trained
+tunes queues its prompts and renders them once the tunes finish training. Pass
+one `--tune-id` per reference slot the pack defines — a multi pack needs at
+least one, and rejects the run (422) if you send none.
 
 ## Board (infinite canvas)
 
