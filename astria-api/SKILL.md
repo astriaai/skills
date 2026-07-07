@@ -232,6 +232,46 @@ astria packs create --title "Spring Lookbook"
 astria prompts update 555 --model nano-banana-pro --pack-id 88   # add a prompt to the pack
 ```
 
+### Run a pack
+
+`astria packs run <slug>` fires a pack's template prompts — `POST /p/:slug/tunes`.
+This is the canonical "run a template": the pack generates its whole prompt set,
+either against **tunes you already have** or against a **fresh tune trained from
+photos**.
+
+```bash
+# multi packs — run against existing tunes (tune_ids), with overrides
+astria packs run spring-lookbook --tune-id 123 --tune-id 456 \
+  --brief "golden hour, Lisbon" --aspect-ratio 3:4 --inpaint-faces
+
+# only a subset of the pack's template prompts
+astria packs run spring-lookbook --tune-id 123 --prompt-ids 501,502
+
+# regular packs — train a fresh tune from photos, then generate
+astria packs run my-pack --title Jane --name woman \
+  --image ./a.jpg --image ./b.jpg          # or --image-url https://…
+```
+
+- **Who the pack runs on** — pass either `--tune-id ID` (repeatable, or a
+  comma-separated list) to reuse existing tunes, **or** a training set
+  (`--title` + `--name` + `--image`/`--image-url`) to train a new tune first.
+  **Multi packs require at least one `--tune-id`** (the server routes tune_ids
+  to its multi handler; omitting them on a multi pack is a 422).
+- `--prompt-ids 501,502` runs only that subset of the pack's template prompts;
+  omit it to run them all.
+- `--brief` is an art-direction brief applied to the generated prompts.
+- **Overrides** ride along as `prompt_attributes`: `--num-images`,
+  `--aspect-ratio`, `--resolution`, `--inpaint-faces/--no-inpaint-faces`, and
+  `--attr KEY=VALUE` (repeatable) for any other prompt attribute, e.g.
+  `--attr super_resolution=true`.
+- The `<slug>` is the pack slug or id. On a multi pack the JSON response
+  includes the new `order` and its `prompt_ids` — feed those to
+  `astria download` (or `astria board hydrate --prompts …`) to fetch the images.
+
+This differs from `astria board order`, which clones a pack's templates onto
+**lookbook roles** (Face, Top, Footwear…) as a board row. `packs run` is the
+plain pack-generation endpoint; `board order` is the infinite-canvas flow below.
+
 ## Board (infinite canvas)
 
 The board (`/boards/:id` in the GUI) organizes work as **frames** (a pack-bound working context), **order rows** (one Order = a line of prompts sharing one reference set) and **reference cards** (tunes with lookbook roles: Pose, Face, Accessories, Jacket, Top, Bags & Belts, Footwear, Bottom, Background). Shapes the user arranges are client-owned — the API acts on domain objects and the canvas updates live.
