@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.9.0"
+VERSION = "1.10.0"
 
 
 def _platform_token():
@@ -971,6 +971,66 @@ def cmd_packs_create(args, cfg):
     emit(request(cfg, "POST", "/packs", json_body=payload, workspace=args.workspace))
 
 
+def prompt_attribute_overrides(args):
+    """Collect the per-prompt override flags into a prompt_attributes dict, sent
+    under tune[prompt_attributes][...]. Named flags cover the common knobs;
+    --attr KEY=VALUE is the escape hatch for any other prompt attribute."""
+    attrs = {}
+    if args.num_images:
+        attrs["num_images"] = args.num_images
+    if args.aspect_ratio:
+        attrs["aspect_ratio"] = args.aspect_ratio
+    if args.resolution:
+        attrs["resolution"] = args.resolution
+    if args.inpaint_faces is not None:
+        attrs["inpaint_faces"] = "true" if args.inpaint_faces else "false"
+    for raw in (args.attr or []):
+        if "=" not in raw:
+            die(f"--attr must be KEY=VALUE (got {raw!r})")
+        key, value = raw.split("=", 1)
+        attrs[key.strip()] = value.strip()
+    return attrs
+
+
+def cmd_packs_run(args, cfg):
+    """Run a pack (template) — POST /p/:slug/tunes — firing its template prompts.
+
+    Two ways to say *who* the pack runs on:
+      * --tune-id ID (repeatable) reuses existing tunes. Multi packs require at
+        least one; the server dispatches tune_ids to its multi handler.
+      * a training set (--title/--name/--image/--image-url) trains a fresh tune
+        from photos, then generates (regular packs).
+    Overrides (--brief, and the prompt_attributes flags) ride along on either path."""
+    tune_ids = [tid for raw in (args.tune_id or []) for tid in _id_list(raw)]
+    training = any((args.title, args.name, args.image, args.image_url))
+    if not tune_ids and not training:
+        die("nothing to run — pass --tune-id (existing tunes) "
+            "or a training set (--title/--name/--image)")
+
+    form = [field("tune[tune_ids][]", tid) for tid in tune_ids]
+
+    if args.title:
+        form.append(field("tune[title]", args.title))
+    if args.name:
+        form.append(field("tune[name]", args.name))
+    for img in (args.image or []):
+        if not Path(img).is_file():
+            die(f"file not found: {img}")
+        form.append(field("tune[images][]", f"@{img}"))
+    for url in (args.image_url or []):
+        form.append(field("tune[image_urls][]", url))
+
+    if args.brief:
+        form.append(field("tune[brief]", args.brief))
+    for pid in _id_list(args.prompt_ids):
+        form.append(field("tune[prompt_ids][]", pid))
+
+    for key, value in prompt_attribute_overrides(args).items():
+        form.append(field(f"tune[prompt_attributes][{key}]", value))
+
+    emit(request(cfg, "POST", f"/p/{args.slug}/tunes", form=form, workspace=args.workspace))
+
+
 def cmd_workspaces_list(args, cfg):
     workspaces = request(cfg, "GET", "/workspaces.json", no_workspace=True)
     emit([{k: w.get(k) for k in ("id", "title", "slug")} for w in workspaces])
@@ -1709,6 +1769,38 @@ def build_parser():
     p.add_argument("--model", default=None, help=image_model_help(models_record, "base model for the pack"))
     p.add_argument("--model-type", default="faceid")
     p.set_defaults(func=cmd_packs_create)
+    p = packs.add_parser(
+        "run", parents=[ws_parent],
+        formatter_class=argparse.RawTextHelpFormatter,
+        help="run a pack (template): fire its prompts against tunes (or a fresh training set)",
+        epilog=(
+            "examples:\n"
+            "  # multi pack — run against existing tunes, with overrides\n"
+            "  astria packs run spring-lookbook --tune-id 123 --tune-id 456 \\\n"
+            "    --brief \"golden hour, Lisbon\" --aspect-ratio 3:4 --inpaint-faces\n"
+            "  # only a subset of the pack's template prompts\n"
+            "  astria packs run spring-lookbook --tune-id 123 --prompt-ids 501,502\n"
+            "  # regular pack — train a fresh tune from photos, then generate\n"
+            "  astria packs run my-pack --title Jane --name woman --image ./a.jpg --image ./b.jpg"
+        ),
+    )
+    p.add_argument("slug", help="pack slug or id")
+    p.add_argument("--tune-id", action="append", metavar="ID",
+                   help="existing tune to run the pack against (repeatable; multi packs need >=1)")
+    p.add_argument("--prompt-ids", help="subset of the pack's template prompt ids, comma-separated")
+    p.add_argument("--brief", help="art-direction brief applied to the generated prompts")
+    p.add_argument("--title", help="[train] tune title, e.g. the subject's name")
+    p.add_argument("--name", help="[train] subject class: man, woman, dress, shoes, ...")
+    p.add_argument("--image", action="append", metavar="FILE", help="[train] local image (repeatable)")
+    p.add_argument("--image-url", action="append", metavar="URL", help="[train] remote image (repeatable)")
+    p.add_argument("--num-images", help="override: images per prompt")
+    p.add_argument("--aspect-ratio", help="override: e.g. 3:4, 1:1, 16:9")
+    p.add_argument("--resolution", help="override: e.g. 1K, 2K")
+    p.add_argument("--inpaint-faces", action=argparse.BooleanOptionalAction, default=None,
+                   help="override: face inpainting on/off")
+    p.add_argument("--attr", action="append", metavar="KEY=VALUE",
+                   help="any other prompt attribute override (repeatable), e.g. --attr super_resolution=true")
+    p.set_defaults(func=cmd_packs_run)
 
     # workspaces
     workspaces = sub.add_parser("workspaces", help="workspaces").add_subparsers(dest="sub", required=True)
