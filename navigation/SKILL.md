@@ -48,3 +48,4 @@ there is no separate upload page to send them to.
 
 ### Orders & Billing
 - `/pricing` — Pricing overview
+- `/pricing/flux` — Cost of training a face / LoRA model. Use this (NOT `/pricing`) for any "how much to train a tune/LoRA/face" question.
