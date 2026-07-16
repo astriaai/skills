@@ -20,7 +20,7 @@ shoes, jewels, poses, backgrounds, props, logo lockups — is a **single-image
 faceid reference tune** whose `name` is a controlled class noun (`woman`, `man`,
 `boy`, `girl`, `dress`, `shirt`, `pants`, `shoes`, `ring`, `necklace`, `chain`,
 `earrings`, `bracelet`, `pose`, `background`, `outfit`, `bottle`, …) and whose
-`title` is the human/SKU label. Prompts address them as `<faceid:ID:1.0>
+`title` is the human/SKU label. Prompts address them as `<faceid:ID:1>
 <class-noun>` — the class noun immediately after the token is the routing
 mechanism that tells the model what to take from that reference.
 
@@ -190,11 +190,11 @@ Iterate until the pilot passes QA.
 
 ```
 <shot/pose line: framing + angle + stance>
-<faceid:AVATAR:1.0> woman <body-guard text>
-<faceid:GARMENT_TOP:1.0> shirt <fit & layering directives>
-<faceid:GARMENT_BOTTOM:1.0> pants <coverage directives>
-<faceid:SHOES:1.0> shoes
-[<faceid:BACKGROUND:1.0> background] plain background {HEX} softbox --background_color {HEX} [--create_crops 70]
+<faceid:AVATAR:1> woman <body-guard text>
+<faceid:GARMENT_TOP:1> shirt <fit & layering directives>
+<faceid:GARMENT_BOTTOM:1> pants <coverage directives>
+<faceid:SHOES:1> shoes
+[<faceid:BACKGROUND:1> background] plain background {HEX} softbox --background_color {HEX} [--create_crops 70]
 ```
 
 - Weight is always `1.0`.
@@ -228,7 +228,7 @@ Author one pack per formula the shop actually sells; each bullet = one template.
 - **Footwear — packshots (no model):** strict side elevation (toe right, heel left, camera level with centerline) · straight-on front from low camera · rear three-quarter · overhead flat-lay · pair at 3/4 one shoe staggered · tight macro on stitching. Every template carries `no foot, no model, no extra objects, seamless light neutral grey studio background, realistic contact shadow beneath the product, natural scale, no compression or squashing` + `--background_color`.
 - **Footwear — on-model:** lower-half 45° · legs-down crop (`close shot from the knees down, always focus on the shoes`) · low-angle shoe close-up (`see only hem of pants above the footwear`) · seated with shoes in foreground.
 - **Bags & accessories** — 3-framing trio: front centered with negative space · three-quarter for depth · tight macro on hardware · plus one on-model hold/wear. Eyewear: `45 degree side-profile fully open, showing the temple arms` + front + worn close-up.
-- **Jewelry** — three families (1:1): *still life* on smooth white fabric / silk / matte stone / sculpted ceramic, `not a close-up, medium distance framing` for negative space; *worn close-ups* `<faceid:WOMAN:1.0> woman wearing <faceid:JEWEL:1.0> earrings` with strict crops — necklace bust `upper chest and neck` or `cropped just below the eyes`; earrings `tight close-up, crop from ear to collarbone, side profile`; ring on a hand model (`hand resting on a stone tray beside an espresso`, always `manicured nails`); chain worn on bare chest/neck; *macro* 100mm. House stanza: `soft neutral-warm studio lighting, diffused directional light from front-side, very soft highlights, no yellow cast, balanced white tones, natural beige palette slightly warm but desaturated`. Rotate skin tone across templates.
+- **Jewelry** — three families (1:1): *still life* on smooth white fabric / silk / matte stone / sculpted ceramic, `not a close-up, medium distance framing` for negative space; *worn close-ups* `<faceid:WOMAN:1> woman wearing <faceid:JEWEL:1> earrings` with strict crops — necklace bust `upper chest and neck` or `cropped just below the eyes`; earrings `tight close-up, crop from ear to collarbone, side profile`; ring on a hand model (`hand resting on a stone tray beside an espresso`, always `manicured nails`); chain worn on bare chest/neck; *macro* 100mm. House stanza: `soft neutral-warm studio lighting, diffused directional light from front-side, very soft highlights, no yellow cast, balanced white tones, natural beige palette slightly warm but desaturated`. Rotate skin tone across templates.
 - **Beauty (cremes/bottles/sprays/lotions)** — *packshot* front label-centered · 45° · back (label legible — register a `label` text tune if type fidelity matters) · line family shot; *atmosphere* product on marble/travertine/wet stone with droplets · botanical styling · backlit translucency · texture macro (cream smear, spray mist); optional application close-ups (hands/cheek/collarbone, no face identity). Surfaces & lighting borrow the jewelry vocabulary (`no yellow cast` for golds/ambers).
 - **Supplements** — packshot battery + lifestyle atmosphere (morning kitchen with citrus and water; gym-bag still life; hand holding the jar label-forward) + ingredient flat-lay.
 - **Home decor** — in-room atmosphere (one coherent interior per collection, palette-matched) · straight-on packshot on seamless · texture/detail macro · scale shot with a human element (hand on ceramic, figure near the lamp — face optional).
@@ -253,10 +253,10 @@ natural fabric behavior, imperfect drape, soft analog 35mm grain`). Formats
    paragraphs (weight distribution, gaze, camera height, 20–30° body angle) when
    stances drift.
 2. **Skeleton pose tunes**: train OpenPose stick-figure renders as `pose` tunes
-   (front / 45° / back), lead the prompt with `<faceid:POSE:1.0> pose`, refine verbally.
+   (front / 45° / back), lead the prompt with `<faceid:POSE:1> pose`, refine verbally.
 3. **Silhouette lock** (to clone the brand's *existing* photography stance-for-
    stance): threshold a real catalog photo to a black silhouette, register as
-   `pose`, prompt `replace the <faceid:POSE:1.0> pose … Keep the pose exactly as
+   `pose`, prompt `replace the <faceid:POSE:1> pose … Keep the pose exactly as
    in the silhouette. Ignore the pose from the outfit.` (see **templatize-page**).
 
 ### 7.5 Video add-on (optional)

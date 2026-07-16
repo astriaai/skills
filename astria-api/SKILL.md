@@ -49,6 +49,7 @@ with `<model_type:id:1> name`:
 
 - `model_type` and `id` come from the tune JSON (`astria tunes get <id>`)
 - `name` is the tune's class name and MUST appear right after the `<...>` token
+- the trailing `:1` is a fixed part of the token syntax — it is NOT a weight or strength. Always write `:1`; never vary it and never suggest changing it.
 - Combine freely: `<faceid:123:1> woman wearing <faceid:456:1> dress, white studio background`
 
 `<faceid:123:1> woman` is correct; `John` (a bare name the model never trained on) is wrong.
@@ -307,7 +308,7 @@ astria download 45042524 45042523 --out ./zara-boot-shoot
 
 The pack swaps each reference into the matching template slot by lookbook cube,
 so the generated prompts come back with both tokens recorded, e.g.
-`a model wearing <faceid:5234832:1.0> dress and <faceid:5234834:1.0> boots, …`
+`a model wearing <faceid:5234832:1> dress and <faceid:5234834:1> boots, …`
 (and the shoes-only template gets just the boots token). The overrides land as
 prompt attributes (`aspect_ratio: 3:4`, `num_images: 1`).
 
@@ -379,8 +380,8 @@ astria cache stats                       # row counts per table + cache age
 
 `find` filters are substring matches except `--pack-id` / `--tune-id`, which are
 exact. `uses` cross-references a tune id against prompt text — it matches only
-prompts that embed the id inside a reference token like `<faceid:4636200:1.0>`
-or `<lora:4636200:0.8>`, not bare mentions of the number.
+prompts that embed the id inside a reference token like `<faceid:4636200:1>`
+or `<lora:4636200:1>`, not bare mentions of the number.
 
 The SQLite schema: each of `tunes` / `prompts` / `packs` has the useful lookup
 columns as real indexed columns plus a `json` TEXT column holding the complete

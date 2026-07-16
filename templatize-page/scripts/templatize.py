@@ -43,8 +43,8 @@ SILHOUETTE_EDIT_TEXT = (
     "showing their pose and body position."
 )
 SHOE_PROMPT_TEMPLATE = (
-    "Reproduce the same <faceid:{pose_tune_id}:1.0> pose image but replace "
-    "the original shoes with <faceid:{shoe_tune_id}:1.0> shoes"
+    "Reproduce the same <faceid:{pose_tune_id}:1> pose image but replace "
+    "the original shoes with <faceid:{shoe_tune_id}:1> shoes"
 )
 POSE_PLACEHOLDER = "{pose}"
 
@@ -270,7 +270,7 @@ def run_silhouette(astria, args):
         aspect_ratio = args.aspect_ratio or detect_aspect_ratio(item["url"])
         edited_url = subject_edit(astria, item["url"], SILHOUETTE_EDIT_TEXT)
         pose_tune = create_pose_tune(astria, edited_url, args.pack_title, index)
-        text = item["prompt"].replace(POSE_PLACEHOLDER, f"<faceid:{pose_tune['id']}:1.0>")
+        text = item["prompt"].replace(POSE_PLACEHOLDER, f"<faceid:{pose_tune['id']}:1>")
         prompt = create_pack_prompt(astria, text, pack["id"], aspect_ratio)
         results.append((prompt["id"], pose_tune["id"]))
     return pack, results

@@ -90,8 +90,8 @@ back to a **CU/ECU**, and keep alternating. No two adjacent tiles share a scale.
 ## Consistency rules (this is what the video pass inherits)
 
 1. **Same reference token, every time.** When the character or a product
-   appears, reference its tune with the *identical* token — `<faceid:ID:1.0> woman`,
-   `<faceid:ID:1.0> dress`, `<faceid:ID:1.0> bag`, `<faceid:ID:1.0> shoes`. The
+   appears, reference its tune with the *identical* token — `<faceid:ID:1> woman`,
+   `<faceid:ID:1> dress`, `<faceid:ID:1> bag`, `<faceid:ID:1> shoes`. The
    token must sit immediately before the class name (see the `astria-api`
    skill). A bare name the model never trained on is wrong.
 2. **Chain continuity in words** — "the same woman", "she", "her" — so the tiles
@@ -130,43 +130,43 @@ teeth visible`.
 ## Worked example A — beach / fashion (multiple products, 16:9 video)
 
 ```
-1) Close-up of the <faceid:4644372:1.0> woman laughing, wearing a straw hat. Natural sunlight, soft film grain, warm beach atmosphere.
-2) Long shot of the same woman wearing the <faceid:4767051:1.0> dress and the <faceid:4767037:1.0> bag, holding her hat, striking the water with her leg.
+1) Close-up of the <faceid:4644372:1> woman laughing, wearing a straw hat. Natural sunlight, soft film grain, warm beach atmosphere.
+2) Long shot of the same woman wearing the <faceid:4767051:1> dress and the <faceid:4767037:1> bag, holding her hat, striking the water with her leg.
 3) Back to close-up, depth of field, she's laughing, shadowing the camera with her hand — background becoming completely blurred.
-4) Close-up on the <faceid:4767035:1.0> handbag, her hand holding it, her legs blurry behind.
-5) Back view of the <faceid:4644372:1.0> woman wearing the straw hat and the <faceid:4767035:1.0> handbag, eyes closed, hair flying in the wind.
-6) Medium low shot of the woman holding the <faceid:4767035:1.0> handbag as she swirls in the shallows.
-7) Medium top-view of the woman's upper torso, straw hat, swirling, one hand to her back, wearing the <faceid:4767051:1.0> dress.
-8) Long shot — the woman running, wearing the <faceid:4767051:1.0> dress, holding the <faceid:4767037:1.0> bag.
-9) Medium shot of the same woman running through ocean shallows holding a surfboard, wearing the <faceid:4767041:1.0> swimsuit.
-10) Extreme close-up of the <faceid:4644372:1.0> woman leaning her hand on the surfboard, slight smile, camera moves away creating blur.
-11) Extreme long shot of the lifeguard tower — the <faceid:4644372:1.0> woman looking out, holding her <faceid:4767037:1.0> bag at the window.
-12) Medium shot of the <faceid:4644372:1.0> woman holding the <faceid:4767035:1.0> handbag inside the lifeguard tower, depth of field, background blurred.
-13) The <faceid:4644372:1.0> woman in the <faceid:4767051:1.0> dress holding the <faceid:4767035:1.0> handbag, on the tower ladder mid-way, bathing her face in the sun, surfboard leaning on the tower.
-14) Extreme close-up on her legs in the sand — you can see the sand grains — she slips her foot into the <faceid:4767033:1.0> sandals.
-15) Medium shot, shoulders down to the knee, the <faceid:4644372:1.0> woman holding the surfboard in the <faceid:4767051:1.0> dress, background blurred.
-16) Long shot — the surfboard set in the sand beside the <faceid:4767037:1.0> bag, the woman's silhouette walking toward the water.
+4) Close-up on the <faceid:4767035:1> handbag, her hand holding it, her legs blurry behind.
+5) Back view of the <faceid:4644372:1> woman wearing the straw hat and the <faceid:4767035:1> handbag, eyes closed, hair flying in the wind.
+6) Medium low shot of the woman holding the <faceid:4767035:1> handbag as she swirls in the shallows.
+7) Medium top-view of the woman's upper torso, straw hat, swirling, one hand to her back, wearing the <faceid:4767051:1> dress.
+8) Long shot — the woman running, wearing the <faceid:4767051:1> dress, holding the <faceid:4767037:1> bag.
+9) Medium shot of the same woman running through ocean shallows holding a surfboard, wearing the <faceid:4767041:1> swimsuit.
+10) Extreme close-up of the <faceid:4644372:1> woman leaning her hand on the surfboard, slight smile, camera moves away creating blur.
+11) Extreme long shot of the lifeguard tower — the <faceid:4644372:1> woman looking out, holding her <faceid:4767037:1> bag at the window.
+12) Medium shot of the <faceid:4644372:1> woman holding the <faceid:4767035:1> handbag inside the lifeguard tower, depth of field, background blurred.
+13) The <faceid:4644372:1> woman in the <faceid:4767051:1> dress holding the <faceid:4767035:1> handbag, on the tower ladder mid-way, bathing her face in the sun, surfboard leaning on the tower.
+14) Extreme close-up on her legs in the sand — you can see the sand grains — she slips her foot into the <faceid:4767033:1> sandals.
+15) Medium shot, shoulders down to the knee, the <faceid:4644372:1> woman holding the surfboard in the <faceid:4767051:1> dress, background blurred.
+16) Long shot — the surfboard set in the sand beside the <faceid:4767037:1> bag, the woman's silhouette walking toward the water.
 ```
 
 ## Worked example B — urban / single hero product (9:16 vertical video)
 
 ```
-1) Close-up of the <faceid:3982430:1.0> girl smiling with wind in her hair. Natural morning light, soft film grain, urban park atmosphere.
-2) Long shot of the same girl wearing the <faceid:3982432:1.0> backpack, walking confidently through autumn leaves.
+1) Close-up of the <faceid:3982430:1> girl smiling with wind in her hair. Natural morning light, soft film grain, urban park atmosphere.
+2) Long shot of the same girl wearing the <faceid:3982432:1> backpack, walking confidently through autumn leaves.
 3) Back to close-up, depth of field, she's laughing, tucking hair behind her ear — background becoming completely blurred.
-4) Close-up on the <faceid:3982432:1.0> backpack straps and buckle, her hand adjusting them, her face blurred behind.
-5) Back view of the <faceid:3982430:1.0> girl wearing the <faceid:3982432:1.0> backpack, looking up at tall trees, morning sun rays through the leaves.
-6) Medium low shot of the girl jumping over a puddle wearing the <faceid:3982432:1.0> backpack, captured mid-air.
-7) Medium top-view of the girl's upper body, unzipping the <faceid:3982432:1.0> backpack to pull out a water bottle, smiling.
-8) Long shot — the girl running up the hill wearing the <faceid:3982432:1.0> backpack, arms spread wide.
-9) Medium shot of the same girl climbing rocky steps, the <faceid:3982432:1.0> backpack swaying, focus on her sneakers.
-10) Extreme close-up of the <faceid:3982430:1.0> girl sitting with the <faceid:3982432:1.0> backpack beside her, slight smile, camera pulls back creating blur.
-11) Extreme long shot of a hilltop overlook — the <faceid:3982430:1.0> girl's silhouette with the <faceid:3982432:1.0> backpack against a golden-hour sky.
-12) Medium shot of the <faceid:3982430:1.0> girl sitting cross-legged, the <faceid:3982432:1.0> backpack open, pulling out a sketchbook, depth of field, background blurred.
-13) The <faceid:3982430:1.0> girl wearing the <faceid:3982432:1.0> backpack, standing at the edge looking at the city skyline, bathed in golden light.
-14) Extreme close-up on her hands zipping up the <faceid:3982432:1.0> backpack — you can see the fabric texture and zipper teeth.
-15) Medium shot from shoulders to waist, the <faceid:3982430:1.0> girl putting on the <faceid:3982432:1.0> backpack, background blurred.
-16) Long shot — the <faceid:3982432:1.0> backpack resting against a tree stump, the girl's silhouette walking away into the sunset.
+4) Close-up on the <faceid:3982432:1> backpack straps and buckle, her hand adjusting them, her face blurred behind.
+5) Back view of the <faceid:3982430:1> girl wearing the <faceid:3982432:1> backpack, looking up at tall trees, morning sun rays through the leaves.
+6) Medium low shot of the girl jumping over a puddle wearing the <faceid:3982432:1> backpack, captured mid-air.
+7) Medium top-view of the girl's upper body, unzipping the <faceid:3982432:1> backpack to pull out a water bottle, smiling.
+8) Long shot — the girl running up the hill wearing the <faceid:3982432:1> backpack, arms spread wide.
+9) Medium shot of the same girl climbing rocky steps, the <faceid:3982432:1> backpack swaying, focus on her sneakers.
+10) Extreme close-up of the <faceid:3982430:1> girl sitting with the <faceid:3982432:1> backpack beside her, slight smile, camera pulls back creating blur.
+11) Extreme long shot of a hilltop overlook — the <faceid:3982430:1> girl's silhouette with the <faceid:3982432:1> backpack against a golden-hour sky.
+12) Medium shot of the <faceid:3982430:1> girl sitting cross-legged, the <faceid:3982432:1> backpack open, pulling out a sketchbook, depth of field, background blurred.
+13) The <faceid:3982430:1> girl wearing the <faceid:3982432:1> backpack, standing at the edge looking at the city skyline, bathed in golden light.
+14) Extreme close-up on her hands zipping up the <faceid:3982432:1> backpack — you can see the fabric texture and zipper teeth.
+15) Medium shot from shoulders to waist, the <faceid:3982430:1> girl putting on the <faceid:3982432:1> backpack, background blurred.
+16) Long shot — the <faceid:3982432:1> backpack resting against a tree stump, the girl's silhouette walking away into the sunset.
 ```
 
 ## Workflow
@@ -175,7 +175,7 @@ teeth visible`.
    already scoped to the workspace, so the commands below need no `-w`.
    - `astria prompts list --limit 20` — the last ~20 prompts of any kind
      (Nano Banana, GPT Image 2, video, …). Scan each one's `text` for
-     `<faceid:NNNN:1.0>` tokens; these IDs are the references the user
+     `<faceid:NNNN:1>` tokens; these IDs are the references the user
      has actually been working with. Count appearances so you know which
      are heavily used.
    - For each unique ID, `astria tunes get <id>` to read the tune's
@@ -204,7 +204,7 @@ teeth visible`.
      subset appears in the artboard. If a needed reference is missing,
      ask for an image and create the tune with `astria tunes create`.
      **"Generic cast" is never the default** — every tile that shows the
-     character or a product must carry a `<faceid:NNNN:1.0>` token.
+     character or a product must carry a `<faceid:NNNN:1>` token.
 
    Skip any question whose answer the user already gave; only ask what's
    genuinely unclear (except the references multi-select — that one always
@@ -221,7 +221,7 @@ teeth visible`.
    one line: **"A cinematic video with the below video shots."** That
    reframes the list from "tiles in a grid" to "cuts in a 15-second
    sequence" — the shot descriptions stay verbatim, including their
-   `<faceid:NNNN:1.0>` tokens, so cast continuity carries into the cut.
+   `<faceid:NNNN:1>` tokens, so cast continuity carries into the cut.
 
    **Do NOT pass the artboard image as `--input-image`.** The artboard
    exists to pre-visualize the story for the user before the video pass;
@@ -252,7 +252,7 @@ teeth visible`.
    first frame matches the artboard's opening close-up.
 
    **Reference budget.** Video models cap the number of unique
-   `<faceid:NNNN:1.0>` references per prompt much more tightly than image
+   `<faceid:NNNN:1>` references per prompt much more tightly than image
    models — over the cap and the generation errors. Keep the video prompt
    focused: prefer the face references (cast continuity is what carries
    the cut) and drop most garment references, describing wardrobe in
@@ -264,10 +264,10 @@ teeth visible`.
 
 ```bash
 astria generate --model gpt-image-2 --aspect-ratio <VIDEO_RATIO> --num-images 1 \
-  --text "1) Close-up of the <faceid:4644372:1.0> woman laughing, wearing a straw hat. Natural sunlight, soft film grain, warm beach atmosphere.
-2) Long shot of the same woman wearing the <faceid:4767051:1.0> dress and the <faceid:4767037:1.0> bag, holding her hat...
+  --text "1) Close-up of the <faceid:4644372:1> woman laughing, wearing a straw hat. Natural sunlight, soft film grain, warm beach atmosphere.
+2) Long shot of the same woman wearing the <faceid:4767051:1> dress and the <faceid:4767037:1> bag, holding her hat...
 ...
-16) Long shot — the surfboard set in the sand beside the <faceid:4767037:1.0> bag, the woman's silhouette walking toward the water."
+16) Long shot — the surfboard set in the sand beside the <faceid:4767037:1> bag, the woman's silhouette walking toward the water."
 ```
 
 - `--model gpt-image-2` — required; GPT Image 2 handles numbered grids best.
@@ -282,7 +282,7 @@ astria generate --model gpt-image-2 --aspect-ratio <VIDEO_RATIO> --num-images 1 
 - **16 tiles, 4x4** is the default. Going past ~18 makes individual tiles too
   small for the video pass to read.
 - **References are mandatory.** Every tile that shows the character or a
-  product must carry its `<faceid:NNNN:1.0>` token. Bare descriptions
+  product must carry its `<faceid:NNNN:1>` token. Bare descriptions
   ("teenage boy", "young woman") lose likeness and break the artboard's job
   as a text-to-video reference. If the user hasn't told you which references
   to use, ask via the multi-select question in step 2 — never default to a

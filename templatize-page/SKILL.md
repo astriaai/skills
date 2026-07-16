@@ -119,7 +119,7 @@ Reproduce the same {pose} pose, <short pose description>, <references + descript
 
 - `{pose}` stays literal — `templatize.py` substitutes the new pose tune id.
 - Add a brief pose description from the image (e.g. "leaning her hand on her knee").
-- For each **checked** category: `<faceid:{ref_tune_id}:1.0> {noun}`.
+- For each **checked** category: `<faceid:{ref_tune_id}:1> {noun}`.
 - For each **unchecked** category visibly present in *this* image: a short text
   description (e.g. "green tank top", "white studio background"). Skip
   categories not present in the image.
@@ -127,7 +127,7 @@ Reproduce the same {pose} pose, <short pose description>, <references + descript
 Example (model + shoes checked; top, accessories, bottoms, background described):
 
 ```
-Reproduce the same {pose} pose, leaning her hand on her knee, <faceid:4425929:1.0> woman with <faceid:4363887:1.0> shoes, green tank top, apple in-ear headset with wire, short blue tights, white studio background
+Reproduce the same {pose} pose, leaning her hand on her knee, <faceid:4425929:1> woman with <faceid:4363887:1> shoes, green tank top, apple in-ear headset with wire, short blue tights, white studio background
 ```
 
 **iv. Write the spec** — write `/tmp/templatize/spec.json`, a JSON array of

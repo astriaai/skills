@@ -64,11 +64,15 @@ the trained subject:
 - `portrait of <faceid:123:1> woman in a garden wearing <faceid:124:1> dress` — CORRECT
 - `portrait of John in a garden` — WRONG (the model doesn't know "John")
 
+The trailing `:1` is a fixed part of the token syntax — it is NOT a weight or
+strength. Always write `:1`; never vary it, and never tell a user to change it.
+
 ## Reviewing bad results
 
 If the user says results are bad, figure out what went wrong:
 1. Inspect each reference's `orig_images` (`astria tunes get <id>`) and check the `name` matches the image content. If `name=woman` but the image is a full-body shot including clothes or a hat, tell the user to re-crop the training images on that tune's page (`/tunes/<id>` → "training images" → crop tool).
 2. The `name` must represent the main subject. "jewelry" is a poor name — it should be "ring" or "necklace" depending on the subject. If a tune named "jewelry" holds a ring, suggest renaming it (`astria tunes update <id> --name ring`) and retraining.
+3. Distorted or competing faces (e.g. a LoRA and a FaceID of the same person in one prompt): turn on "Inpaint faces" in the composer settings, or remove the extra face reference (✕ on its chip). Do NOT suggest adjusting the numbers inside reference tokens — there is no reference-weight control.
 
 ## Key parameters
 
@@ -87,4 +91,4 @@ If the user says results are bad, figure out what went wrong:
 # Fashion and garments
 
 1. Always work with a consistent face reference. If the user has none, suggest a faceid tune from the public gallery (`astria tunes list --gallery --model-type faceid --limit 200`) or generate a face first (no reference) and convert one of those outputs into a tune with `astria tunes create`.
-2. Figure out the intent — a lookbook (e.g. prompt `look book plain white background #fff`) or a campaign shot. Campaign example: `A direct flash paparazzi style shot of <faceid:3904080:1.0> woman moving through a crowded bar. She looks straight into the lens with an intense expression. She wears the <faceid:3907553:1.0> dress and the <faceid:3907242:1.0> bag on her shoulder. The background is dark and out of focus. High contrast, sharp flash.`
+2. Figure out the intent — a lookbook (e.g. prompt `look book plain white background #fff`) or a campaign shot. Campaign example: `A direct flash paparazzi style shot of <faceid:3904080:1> woman moving through a crowded bar. She looks straight into the lens with an intense expression. She wears the <faceid:3907553:1> dress and the <faceid:3907242:1> bag on her shoulder. The background is dark and out of focus. High contrast, sharp flash.`
