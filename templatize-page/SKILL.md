@@ -26,6 +26,11 @@ Two Python scripts ship with this skill in `scripts/` (stdlib only). They call
 the bundled `astria` CLI for every API operation, so authentication and
 workspace scoping are handled for you — see the `astria-api` skill.
 
+The `${CLAUDE_SKILL_DIR:-$HOME/.codex/skills/templatize-page}` expansion in the
+commands below resolves the skill directory in every runtime: Claude Code
+exports `CLAUDE_SKILL_DIR`; the Codex-based Astria chat agent doesn't set it,
+but installs this skill at `~/.codex/skills/templatize-page`.
+
 ## Workflow
 
 ### 1. Choose the variant
@@ -38,7 +43,7 @@ Ask the user with your ask-user question tool (`AskUserQuestion` in Claude Code,
 ### 2. Scrape the page
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/scrape.py" <url>
+python3 "${CLAUDE_SKILL_DIR:-$HOME/.codex/skills/templatize-page}/scripts/scrape.py" <url>
 ```
 
 Emits JSON: `{"title": "...", "url": "<final url>", "images": [{"url": "...", "alt": "...", "width": ..., "height": ...}, ...]}`. The page `<title>` (or `og:title` when set) is the pack title — trim marketing cruft (price, "✓️", site name) to the product / collection name. Capture both — `title` for the pack, `images` for the next step.
@@ -66,7 +71,7 @@ on a plain background, no model) that we do NOT want as poses. Filter visually:
 #### 4a. Shoe-swap variant
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/templatize.py" \
+python3 "${CLAUDE_SKILL_DIR:-$HOME/.codex/skills/templatize-page}/scripts/templatize.py" \
   --pack-title "<page title>" \
   --pose-image-url <surviving_url_1> \
   --pose-image-url <surviving_url_2> \
@@ -137,7 +142,7 @@ objects, one per surviving image.
 **v. Run the script**
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/templatize.py" \
+python3 "${CLAUDE_SKILL_DIR:-$HOME/.codex/skills/templatize-page}/scripts/templatize.py" \
   --mode silhouette \
   --pack-title "<page title>" \
   --spec /tmp/templatize/spec.json
