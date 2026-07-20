@@ -272,9 +272,10 @@ astria packs run my-pack --title Jane --name woman \
   `order` and its `prompt_ids` — feed those to `astria download` (or
   `astria board hydrate --prompts …`) to fetch the images.
 
-This differs from `astria board order`, which clones a pack's templates onto
-**lookbook roles** (Face, Top, Footwear…) as a board row. `packs run` is the
-plain pack-generation endpoint; `board order` is the infinite-canvas flow below.
+`astria board order` (below) is a role-labeled spelling of the same generation —
+both now ride the same server endpoint, and the row lands on the board either
+way. Use whichever flag style fits: plain `--tune-id` lists here, or
+`--ref Role=tune:ID` pairs there.
 
 #### Worked example — a multi pack, step by step
 

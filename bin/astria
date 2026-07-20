@@ -1064,24 +1064,27 @@ def cmd_board_hydrate(args, cfg):
 
 
 def cmd_board_order(args, cfg):
-    references = []
+    # Rides the shared pack-generation endpoint (same as `packs run` and the
+    # board Row Builder). References are matched to the pack's template slots
+    # by class name server-side, so the Role= label is advisory only.
+    tune_ids = []
     for ref in args.ref or []:
         if "=" not in ref:
             die(f"--ref must look like Role=tune:ID (got {ref!r})")
         role, value = ref.split("=", 1)
         if value.startswith("tune:"):
-            references.append({"role": role, "tune_id": int(value[5:])})
+            tune_ids.append(int(value[5:]))
         else:
             die(f"unsupported reference value {value!r} — use tune:ID (create raw-image refs with `astria tunes create` first)")
-    order = {"pack_id": int(args.pack), "references": references}
+    tune = {"tune_ids": tune_ids}
     if args.prompts:
-        order["prompt_ids"] = _id_list(args.prompts)
+        tune["prompt_ids"] = _id_list(args.prompts)
     if args.brief:
-        order["brief"] = args.brief
+        tune["brief"] = args.brief
     if args.num_images:
-        order["overrides"] = {"num_images": int(args.num_images)}
-    emit(request(cfg, "POST", "/board/orders.json", json_body={"order": order},
-                 workspace=args.workspace))
+        tune["prompt_attributes"] = {"num_images": int(args.num_images)}
+    emit(request(cfg, "POST", f"/p/{args.pack}/tunes/create_with_multi.json",
+                 json_body={"tune": tune}, workspace=args.workspace))
 
 
 def cmd_board_regenerate(args, cfg):
@@ -1821,7 +1824,7 @@ def build_parser():
     p.add_argument("--tunes", help="comma-separated tune ids")
     p.set_defaults(func=cmd_board_hydrate)
     p = board.add_parser("order", parents=[board_parent], help="create a row: an order from a pack with swapped references")
-    p.add_argument("--pack", required=True, help="pack id")
+    p.add_argument("--pack", required=True, help="pack id or slug")
     p.add_argument("--ref", action="append", help="Role=tune:ID (repeatable) — e.g. Face=tune:123")
     p.add_argument("--prompts", help="template prompt id subset, comma-separated")
     p.add_argument("--brief", help="mood/art-direction brief applied to all template prompts")
