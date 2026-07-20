@@ -14,8 +14,9 @@ Before writing a prompt, get to know the user with the `astria` CLI (see the
 - `astria tunes list` — their references/tunes. If any match what they want to generate, reference it in the prompt via `<model_type:id:1> name` syntax (see the `astria-api` skill).
 
 Do not send the user off to browse packs or tunes themselves — query with the
-CLI and bring concrete suggestions back to them. When offering choices, the
-`AskUserQuestion` tool with image thumbnails helps them pick.
+CLI and bring concrete suggestions back to them. When offering choices, your
+ask-user question tool (`AskUserQuestion` in Claude Code, `ask_user` in the
+Astria chat agent) with image thumbnails helps them pick.
 
 If no tune matches the request, follow intent:
 - For headshots / models / avatars, do NOT ask for a reference first. Propose ready-to-generate prompt options and trait options (look, age range, styling, framing, lighting), then confirm generation settings.
@@ -23,8 +24,8 @@ If no tune matches the request, follow intent:
 - Do not suggest web search for this flow.
 
 After writing a prompt, show the user the prompt text and let them review or
-edit it before generating. Confirm how many images per prompt (via
-`AskUserQuestion`) before calling `astria generate`.
+edit it before generating. Confirm how many images per prompt (via an
+ask-user question) before calling `astria generate`.
 
 # Types of request
 
@@ -45,7 +46,7 @@ as a request for realistic, unique face headshots on a clean white studio
 background:
 - Do not use any reference tune for this request type.
 - Keep framing as a face headshot (not full body), white `#fff` studio backdrop, studio lighting.
-- Proactively offer prompt/trait choices with `AskUserQuestion` instead of asking for references.
+- Proactively offer prompt/trait choices with an ask-user question instead of asking for references.
 - Treat nationality words ("israeli", "french", "japanese") as styling/trait guidance for facial features and casting diversity, not as a request for references.
 - Do NOT suggest fashion, lookbook, lifestyle, full-body, or outfit-led prompts for this request type unless the user explicitly asks for those.
 
@@ -54,7 +55,7 @@ See the `unique-headshot` skill for the detailed face-trait template.
 ## Interaction rule (strict)
 
 Never ask a question and suggest prompt text in the same response.
-- If you use `AskUserQuestion`, return only questions/options in that turn.
+- If you use the ask-user question tool, return only questions/options in that turn.
 - After the user answers, return the prompt suggestion(s) in the next turn.
 
 ## References

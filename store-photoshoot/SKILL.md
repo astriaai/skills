@@ -69,7 +69,7 @@ name, logo, and a full product-URL list if the Store API is disabled.
 direct image URLs.
 
 **Image audit (critical).** Download 20–40 product images across categories and
-*look at them* (`Read` each). Record, per category: shot style (on-model vs
+*look at them* (actually view each image). Record, per category: shot style (on-model vs
 packshot vs flat-lay vs atmosphere); angle coverage (front/back/side/detail);
 the house background hex (sample corner pixels); model casting (age, gender mix,
 ethnicity, styling); lighting fingerprint (softbox-even vs flash vs daylight).
@@ -80,8 +80,9 @@ which items can support back-view templates.
 ## Phase 2 — Extract the Brand DNA brief
 
 Synthesize a structured brief and **confirm it with the customer before
-building** (one `AskUserQuestion` round: brand read, shoot register, casting
-direction). Capture:
+building** — one round with your ask-user question tool (`AskUserQuestion` in
+Claude Code, `ask_user` in the Astria chat agent): brand read, shoot register,
+casting direction. Capture:
 
 - `brand`, `vertical` (fashion | footwear | jewelry | beauty | supplements | home-decor | mixed)
 - `categories`: product_type histogram → tune classes, SKU counts, back-photo availability
@@ -102,7 +103,7 @@ the newest collection, never try to shoot the whole 10K in the pilot.
 
 A brand usually gets one primary register + one or two supporting. Ask the
 customer which they want as the lead when the vertical supports several
-(single `AskUserQuestion`). Avatars are cast **only** for on-model registers.
+(a single ask-user question). Avatars are cast **only** for on-model registers.
 
 | Vertical | Primary | Supporting |
 |---|---|---|
@@ -134,7 +135,7 @@ shoulders, hair pulled back, **no jewelry on the face ref** (critical for
 jewelry brands — earrings on a face ref contaminate every render), ≥1 unique
 distinguishing feature, never repeat an ethnicity in a batch. Match casting to
 the Brand DNA (audience age, ethnicity mix, positioning). Present a candidate
-board (`AskUserQuestion` with thumbnails), then register each winner:
+board (ask-user question with thumbnails), then register each winner:
 
 ```
 astria tunes create -w <id> --title "<Name> — <brand>" --name woman|man|boy|girl --image-url <winner.jpg>

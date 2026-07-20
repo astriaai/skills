@@ -30,7 +30,7 @@ workspace scoping are handled for you — see the `astria-api` skill.
 
 ### 1. Choose the variant
 
-Ask the user with `AskUserQuestion` (single select) before scraping:
+Ask the user with your ask-user question tool (`AskUserQuestion` in Claude Code, `ask_user` in the Astria chat agent; single select) before scraping:
 
 - **Shoe-swap** — replace the footwear in every shot.
 - **General pose (silhouette)** — keep the pose, swap any items they choose.
@@ -55,7 +55,7 @@ on a plain background, no model) that we do NOT want as poses. Filter visually:
      i=$((i+1)); curl -sSL -o "/tmp/templatize/img_${i}.jpg" "$url"
    done
    ```
-2. `Read` each `/tmp/templatize/img_*.jpg` file. For each one decide:
+2. View each `/tmp/templatize/img_*.jpg` image. For each one decide:
    - **Keep** when a person is visible wearing or holding product (a lifestyle / editorial / on-model shot).
    - **Drop** when the frame is a product alone — a single shoe / sandal / handbag on a plain or studio backdrop with no human figure. Also drop logos, banners, swatches.
    - **When in doubt, keep.** A borderline cropped-from-the-knees shot is fine; the edit step will normalize it.
@@ -81,7 +81,7 @@ The silhouette edit strips the figure down to its pose, so the prompt has to
 rebuild everything else — references for the parts the user wants swappable,
 plain text for the parts they don't.
 
-**i. Ask which items to make swappable** — one page-wide `AskUserQuestion`
+**i. Ask which items to make swappable** — one page-wide ask-user question
 with `multiSelect: true`. The references are shared across every pose, so this
 is asked **once**, not per image. Offer these categories:
 
@@ -96,7 +96,7 @@ Checked → swapped with a reference tune. Unchecked → described in the prompt
 
 **ii. Pick a reference tune per checked category** — for each checked category,
 list the workspace's tunes of that class and ask the user which one to use
-(`AskUserQuestion`, single select; batch up to 4 categories per call):
+(ask-user question, single select; batch up to 4 categories per call):
 
 | Category        | `astria tunes list ...`                                              | prompt noun        |
 |-----------------|----------------------------------------------------------------------|--------------------|
@@ -110,7 +110,7 @@ list the workspace's tunes of that class and ask the user which one to use
 If a checked category has no matching tune, tell the user and treat it as
 unchecked (describe it in text instead).
 
-**iii. Compose a prompt per image** — `Read` each surviving image again and
+**iii. Compose a prompt per image** — look at each surviving image again and
 write a final prompt containing the literal placeholder `{pose}`:
 
 ```
@@ -166,7 +166,7 @@ prompts created, and point them to `/packs/<pack_id>`.
 
 1. Variant question → shoe-swap.
 2. `scrape.py` → `title="Gentle Souls Spring 2026 Lookbook"`, ~14 images.
-3. Download all 14, `Read` each — 5 packshots dropped, 9 on-model kept.
+3. Download all 14, view each — 5 packshots dropped, 9 on-model kept.
 4. `templatize.py --pack-title "Gentle Souls Spring 2026 Lookbook" --pose-image-url ...` (9 URLs).
 5. Report: "Created pack **Gentle Souls Spring 2026 Lookbook** (id 4821) with 9 shoe-swap prompts using reference *Brown leather sandal* (id 4457109) — /packs/4821."
 
@@ -176,7 +176,7 @@ prompts created, and point them to `/packs/<pack_id>`.
 2. `scrape.py` + classify → 6 lifestyle images kept.
 3. Checkbox → user checks **Model** and **Shoes**.
 4. Reference questions → Model = tune 4425929 *"Studio model — Maya"*, Shoes = tune 4363887 *"Tan block-heel sandal"*.
-5. Per image, `Read` it and compose a `{pose}` prompt — refs for model + shoes, text for the unchecked top / bottoms / background. Write `spec.json`.
+5. Per image, view it and compose a `{pose}` prompt — refs for model + shoes, text for the unchecked top / bottoms / background. Write `spec.json`.
 6. `templatize.py --mode silhouette --pack-title "Resort Editorial" --spec /tmp/templatize/spec.json`.
 7. Report: "Created pack **Resort Editorial** (id 4830) with 6 general-pose prompts — /packs/4830."
 

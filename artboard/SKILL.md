@@ -189,14 +189,15 @@ teeth visible`.
    Don't assume an artboard already exists; treat any recent prompts as
    signal. Gather the candidates yourself — don't send the user off to
    browse.
-2. **Clarify the brief — ask before writing.** Use one `AskUserQuestion` call;
-   per the interaction rule, put *only* questions in that turn:
+2. **Clarify the brief — ask before writing.** Use one call of your ask-user
+   question tool (`AskUserQuestion` in Claude Code, `ask_user` in the Astria
+   chat agent); per the interaction rule, put *only* questions in that turn:
    - **Final video aspect ratio** — *always* ask (`16:9` / `9:16` / `1:1` /
      `4:5`). The tiles must match the video the artboard will drive.
    - **Topic / action / vibe** — if the user hasn't already said what the video
      is about, ask for the subject, setting and mood.
    - **References — always a multi-select, every reference from step 1
-     listed as its own option.** Single `AskUserQuestion` with
+     listed as its own option.** A single ask-user question with
      `multiSelect: true`. Each option is one of the references discovered
      in step 1 — label it with the tune's `title` (display name), put the
      `name` class in the description ("woman", "shirt", "shoes", …), and
