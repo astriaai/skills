@@ -269,13 +269,8 @@ astria packs run my-pack --title Jane --name woman \
   `--attr super_resolution=true`.
 - The positional is the pack **slug or numeric id** — both resolve to the same
   `/p/:slug/tunes` endpoint. On a multi pack the JSON response includes the new
-  `order` and its `prompt_ids` — feed those to `astria download` (or
-  `astria board hydrate --prompts …`) to fetch the images.
-
-`astria board order` (below) is a role-labeled spelling of the same generation —
-both now ride the same server endpoint, and the row lands on the board either
-way. Use whichever flag style fits: plain `--tune-id` lists here, or
-`--ref Role=tune:ID` pairs there.
+  `order` and its `prompt_ids` — feed those to `astria prompts wait` and
+  `astria download` to fetch the images.
 
 #### Worked example — a multi pack, step by step
 
@@ -303,7 +298,7 @@ astria packs run zara-boot-test -w 679 \
 #     "prompt_ids": [45042524, 45042523] }
 
 # 4. Fetch the results (the order hands back the prompt ids)
-astria board hydrate -w 679 --prompts 45042524,45042523   # statuses + image urls
+astria prompts wait -w 679 45042524 45042523              # block until rendered (or user_error)
 astria download 45042524 45042523 --out ./zara-boot-shoot
 ```
 
@@ -320,21 +315,21 @@ least one, and rejects the run (422) if you send none.
 
 ## Board (infinite canvas)
 
-The board (`/boards/:id` in the GUI) organizes work as **frames** (a pack-bound working context), **order rows** (one Order = a line of prompts sharing one reference set) and **reference cards** (tunes with lookbook roles: Pose, Face, Accessories, Jacket, Top, Bags & Belts, Footwear, Bottom, Background). Shapes the user arranges are client-owned — the API acts on domain objects and the canvas updates live.
+The board (`/boards/:id` in the GUI) organizes work as **frames** (a pack-bound working context), **order rows** (one Order = a line of prompts sharing one reference set) and **reference cards** (tunes with lookbook roles: Pose, Face, Accessories, Jacket, Top, Bags & Belts, Footwear, Bottom, Background). There is no board API and no `board` verb — you act on the regular domain objects with the verbs above, and the canvas updates live (new rows land via the `order.created` broadcast, cells re-render as prompts finish).
 
 ```bash
-astria board get                                     # bootstrap: packs, lookbook roles, models (add --snapshot for raw tldraw doc)
-astria board hydrate --orders 901 --prompts 7001     # statuses, texts, image urls for board objects
-astria board order --pack 88 --ref Face=tune:123 --ref Top=tune:456 \
-    --prompts 501,502 --brief "golden hour, Lisbon"  # new row: clone templates with swapped refs
-astria board regenerate 7001 --text "..."            # variant with edited text (stacks as a version on its cell)
-astria board promote 7001                            # apply the prompt back to the pack template (confirm with the user first)
-astria board promote 7001 --detach                   # stop tracking the template instead
-astria board demote 7001                             # take a template prompt back out of its pack (stays in the frame)
+astria packs run 88 --tune-id 123 --tune-id 456 \
+    --prompt-ids 501,502 --brief "golden hour, Lisbon"  # new row: clone the pack's templates with swapped refs
+astria prompts wait 7001 7002 && astria download 7001 7002   # wait for the row's cells, fetch images
 astria generate --text "..." --base-pack-id 88       # one-off into pack 88's frame (free row, not a template)
+# variant with edited text (stacks as a version on its cell; order_id from `astria prompts get`):
+astria api POST /prompts/7001/duplicate --query view=board --data '{"prompt":{"text":"...","order_id":901}}'
+# promote a prompt into the pack template / demote a template back out (confirm with the user first):
+astria api PATCH /prompts/7001 --query view=board --data '{"prompt":{"pack_id":88,"base_pack_id":null,"orig_prompt_id":null}}'
+astria api PATCH /prompts/7001 --query view=board --data '{"prompt":{"pack_id":null,"base_pack_id":88}}'
 ```
 
-Raw-image references: create an instant Gemini reference first (`astria tunes create --branch gemini ...`), then pass it as `--ref Role=tune:ID`.
+Raw-image references: create an instant Gemini reference first (`astria tunes create --branch gemini ...`), then pass its id as `--tune-id`.
 
 ## Workspaces & landing pages
 
