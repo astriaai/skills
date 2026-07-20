@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-VERSION = "1.10.0"
+VERSION = "1.11.0"
 
 
 def _platform_token():
@@ -992,6 +992,10 @@ def prompt_attribute_overrides(args):
     return attrs
 
 
+def _id_list(value):
+    return [int(v) for v in str(value).split(",") if v.strip()] if value else []
+
+
 def cmd_packs_run(args, cfg):
     """Run a pack (template) — POST /p/:slug/tunes — firing its template prompts.
 
@@ -1039,96 +1043,6 @@ def cmd_workspaces_list(args, cfg):
 def cmd_workspaces_create(args, cfg):
     payload = {"workspace": {"title": args.title}}
     emit(request(cfg, "POST", "/workspaces.json", json_body=payload, no_workspace=True))
-
-
-# --------------------------------------------------------------------------
-# commands — board (infinite canvas)
-# --------------------------------------------------------------------------
-def _id_list(value):
-    return [int(v) for v in str(value).split(",") if v.strip()] if value else []
-
-
-def cmd_board_get(args, cfg):
-    data = request(cfg, "GET", "/board.json", workspace=args.workspace)
-    if not args.snapshot:
-        data.get("board", {}).pop("snapshot", None)
-        data.pop("reference_tunes", None)
-    emit(data)
-
-
-def cmd_board_hydrate(args, cfg):
-    query = ([("order_ids[]", i) for i in _id_list(args.orders)]
-             + [("prompt_ids[]", i) for i in _id_list(args.prompts)]
-             + [("tune_ids[]", i) for i in _id_list(args.tunes)])
-    emit(request(cfg, "GET", "/board/hydrate.json", query=query, workspace=args.workspace))
-
-
-def cmd_board_order(args, cfg):
-    # Rides the shared pack-generation endpoint (same as `packs run` and the
-    # board Row Builder). References are matched to the pack's template slots
-    # by class name server-side, so the Role= label is advisory only.
-    tune_ids = []
-    for ref in args.ref or []:
-        if "=" not in ref:
-            die(f"--ref must look like Role=tune:ID (got {ref!r})")
-        role, value = ref.split("=", 1)
-        if value.startswith("tune:"):
-            tune_ids.append(int(value[5:]))
-        else:
-            die(f"unsupported reference value {value!r} — use tune:ID (create raw-image refs with `astria tunes create` first)")
-    tune = {"tune_ids": tune_ids}
-    if args.prompts:
-        tune["prompt_ids"] = _id_list(args.prompts)
-    if args.brief:
-        tune["brief"] = args.brief
-    if args.num_images:
-        tune["prompt_attributes"] = {"num_images": int(args.num_images)}
-    emit(request(cfg, "POST", f"/p/{args.pack}/tunes/create_with_multi.json",
-                 json_body={"tune": tune}, workspace=args.workspace))
-
-
-def cmd_board_regenerate(args, cfg):
-    # Classic duplicate; the variant joins its source's order (same row), so
-    # fetch the source's order_id first.
-    hydrated = request(cfg, "GET", "/board/hydrate.json",
-                       query=[("prompt_ids[]", args.prompt_id), ("skip_recents", 1)], workspace=args.workspace)
-    prompts = hydrated.get("prompts") or []
-    order_id = prompts[0].get("order_id") if prompts else None
-    prompt = {"text": args.text}
-    if order_id:
-        prompt["order_id"] = order_id
-    emit(request(cfg, "POST", f"/prompts/{args.prompt_id}/duplicate",
-                 query=[("view", "board")], json_body={"prompt": prompt}, workspace=args.workspace))
-
-
-def _board_prompt(args, cfg):
-    hydrated = request(cfg, "GET", "/board/hydrate.json",
-                       query=[("prompt_ids[]", args.prompt_id), ("skip_recents", 1)], workspace=args.workspace)
-    prompts = hydrated.get("prompts") or []
-    return prompts[0] if prompts else {}
-
-
-def cmd_board_promote(args, cfg):
-    # Template membership is a plain pack_id write. Promote assigns the pack
-    # the look is bound to (its frame's pack); --detach just clears the
-    # template-tracking lineage.
-    if args.detach:
-        body = {"prompt": {"orig_prompt_id": None}}
-    else:
-        target_pack_id = _board_prompt(args, cfg).get("base_pack_id")
-        if not target_pack_id:
-            die("prompt is not bound to a pack frame (no base_pack_id) — nothing to promote into")
-        body = {"prompt": {"pack_id": target_pack_id, "base_pack_id": None, "orig_prompt_id": None}}
-    emit(request(cfg, "PATCH", f"/prompts/{args.prompt_id}",
-                 query=[("view", "board")], json_body=body, workspace=args.workspace))
-
-
-def cmd_board_demote(args, cfg):
-    # Clear pack_id; base_pack_id keeps the prompt bound to the pack's frame.
-    prompt = _board_prompt(args, cfg)
-    body = {"prompt": {"pack_id": None, "base_pack_id": prompt.get("base_pack_id") or prompt.get("pack_id")}}
-    emit(request(cfg, "PATCH", f"/prompts/{args.prompt_id}",
-                 query=[("view", "board")], json_body=body, workspace=args.workspace))
 
 
 # --------------------------------------------------------------------------
@@ -1676,7 +1590,7 @@ def build_parser():
     p.add_argument("--tune", help="tune id the prompt belongs to")
     p.add_argument("--model", help="model name instead of --tune")
     p.add_argument("--pack-id", help="assign as a pack template prompt")
-    p.add_argument("--base-pack-id", help="bind as a pack one-off (board frame)")
+    p.add_argument("--base-pack-id", help="bind as a pack one-off")
     p.add_argument("--workspace-id")
     p.set_defaults(func=cmd_prompts_update)
     p = prompts.add_parser("wait", parents=[ws_parent],
@@ -1703,7 +1617,7 @@ def build_parser():
     p.add_argument("--text", help="prompt text; embed references as <faceid:ID:1>")
     p.add_argument("--video-prompt", help=argparse.SUPPRESS)
     p.add_argument("--num-images", help="override config default_num_images; otherwise 2, or 1 with --input-image")
-    p.add_argument("--seed", help="For supported models only")
+    p.add_argument("--seed", help="generation seed; also makes an otherwise-identical prompt distinct")
     p.add_argument("--aspect-ratio", default="3:4", help="e.g. 3:4, 1:1, 16:9 (default: %(default)s)")
     p.add_argument("--resolution", help=resolution_help(models_record))
     p.add_argument("--input-image", help="URL or local file to edit")
@@ -1711,7 +1625,7 @@ def build_parser():
     p.add_argument("--images", action="append", metavar="NAME=PATH_OR_URL",
                    help="Attach reference image. Name is the main subject class, for example: man, woman, shoes, outfit, shirt, background, style")
     p.add_argument("--pack-id", help="author the prompt as a pack template prompt")
-    p.add_argument("--base-pack-id", help="bind as a pack one-off (lands in the pack's board frame)")
+    p.add_argument("--base-pack-id", help="bind as a pack one-off")
     p.add_argument("--wait", action="store_true", help="block until images are ready")
     p.set_defaults(func=cmd_generate)
 
@@ -1811,36 +1725,6 @@ def build_parser():
     wc = workspaces.add_parser("create", help="create a workspace")
     wc.add_argument("--title", required=True)
     wc.set_defaults(func=cmd_workspaces_create)
-
-    # board — infinite canvas (frames / order rows / reference cards)
-    board_parent = argparse.ArgumentParser(add_help=False, parents=[ws_parent])
-    board = sub.add_parser("board", help="infinite-canvas board (frames, order rows, references)").add_subparsers(dest="sub", required=True)
-    p = board.add_parser("get", parents=[board_parent], help="board bootstrap: packs, roles, generation models")
-    p.add_argument("--snapshot", action="store_true", help="include the raw tldraw snapshot")
-    p.set_defaults(func=cmd_board_get)
-    p = board.add_parser("hydrate", parents=[board_parent], help="fetch orders/prompts/tunes referenced on the board")
-    p.add_argument("--orders", help="comma-separated order ids")
-    p.add_argument("--prompts", help="comma-separated prompt ids")
-    p.add_argument("--tunes", help="comma-separated tune ids")
-    p.set_defaults(func=cmd_board_hydrate)
-    p = board.add_parser("order", parents=[board_parent], help="create a row: an order from a pack with swapped references")
-    p.add_argument("--pack", required=True, help="pack id or slug")
-    p.add_argument("--ref", action="append", help="Role=tune:ID (repeatable) — e.g. Face=tune:123")
-    p.add_argument("--prompts", help="template prompt id subset, comma-separated")
-    p.add_argument("--brief", help="mood/art-direction brief applied to all template prompts")
-    p.add_argument("--num-images", help="images per prompt")
-    p.set_defaults(func=cmd_board_order)
-    p = board.add_parser("regenerate", parents=[board_parent], help="variant of a prompt with edited text (stacks on its cell)")
-    p.add_argument("prompt_id")
-    p.add_argument("--text", required=True)
-    p.set_defaults(func=cmd_board_regenerate)
-    p = board.add_parser("promote", parents=[board_parent], help="apply a prompt back to its pack template (or --detach)")
-    p.add_argument("prompt_id")
-    p.add_argument("--detach", action="store_true", help="clear orig_prompt_id instead of promoting")
-    p.set_defaults(func=cmd_board_promote)
-    p = board.add_parser("demote", parents=[board_parent], help="take a template prompt back out of its pack (stays in the frame)")
-    p.add_argument("prompt_id")
-    p.set_defaults(func=cmd_board_demote)
 
     # landing page
     landing = sub.add_parser("landing", help="workspace landing page").add_subparsers(dest="sub", required=True)
