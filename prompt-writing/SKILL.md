@@ -89,6 +89,32 @@ If the user says results are bad, figure out what went wrong:
 - Include background descriptions: "clean white studio", "blurred urban street", "autumn forest".
 - For product shots, describe the surface and arrangement.
 
+## Keeping the background identical across generations
+
+Gemini / Nano Banana does not hold a backdrop exactly from one generation to
+the next — the shade and brightness of a studio background drift even when a
+background reference is attached. Wording cannot fix this; the reliable fix is
+the post-processing flag, appended to the prompt text:
+
+```
+astria generate --text "<faceid:123:1> woman in a studio --background_color #f2f0ed"
+```
+
+`--background_color #RRGGBB` recolors the detected background to that exact hex
+after generation, so a whole catalog lands on the same backdrop. It runs on
+Gemini / Nano Banana, partner models and Kontext — not on Flux. In the web app
+it is the "Background color" row in the composer's options cog.
+
+Two related mistakes to check when a user reports a drifting background:
+
+- Text like "match the provided background reference" with no background
+  reference actually attached — the model then invents a backdrop every run.
+  Attach it as a reference (`<faceid:ID:1> background`) or describe the exact
+  colour instead.
+- Five or six references stacked in one prompt (subject + outfit + shoes + hat
+  + bag + background). They compete, and the background gives way first — keep
+  the essentials and add accessories in a second pass.
+
 # Fashion and garments
 
 1. Always work with a consistent face reference. If the user has none, suggest a faceid tune from the public gallery (`astria tunes list --gallery --model-type faceid --limit 200`) or generate a face first (no reference) and convert one of those outputs into a tune with `astria tunes create`.
