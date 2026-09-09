@@ -113,7 +113,7 @@ Vary lighting for natural diversity:
 ## Generation Rules
 
 1. **No reference tunes** — these prompts generate entirely new faces (no `<faceid:...>` tokens)
-2. **Always generate with Recraft V4.1**: `astria generate --model recraft-4-1 --text "..."` — its detailed skin rendering suits beauty headshots
+2. **Always generate with Recraft 4.1 Pro**. Before generating, run `astria models` and resolve the current Recraft 4.1 Pro entry by its name/title (the catalog may expose a CLI name such as `recraft-4-1` or a display title such as `Recraft V4.1`). Never hard-code or infer a numeric tune ID, never use the composer default, and never silently substitute another model. Use the discovered model name for `astria generate`; in chat, use the discovered tune ID in `present_generation` — its detailed skin rendering suits beauty headshots
 3. **Default parameters**: `--num-images 2 --aspect-ratio 1:1` (Recraft has no `--resolution` — that flag is Gemini-only)
 4. **Never repeat the same ethnicity/heritage** in a batch, and never lean on one
    region across batches — check your last few prompts and move on
