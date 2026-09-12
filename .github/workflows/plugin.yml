@@ -1,0 +1,57 @@
+name: Plugin package
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refresh generated OpenAI plugin
+        run: scripts/sync-plugin.sh --no-local-links
+      - name: Require committed plugin output
+        run: |
+          git status --porcelain --untracked-files=all -- plugins/astria > /tmp/astria-plugin-status
+          if [ -s /tmp/astria-plugin-status ]; then
+            cat /tmp/astria-plugin-status
+            echo "Run scripts/sync-plugin.sh and commit plugins/astria."
+            exit 1
+          fi
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: scripts/validate-plugin.py --expected-version "${GITHUB_REF_NAME#v}"
+      - name: Validate plugin
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: scripts/validate-plugin.py
+      - name: Build upload archive
+        run: scripts/build-plugin.py dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: astria-plugin
+          path: |
+            dist/*.zip
+            dist/*.sha256
+  publish-tagged-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: validate-and-package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: astria-plugin
+          path: dist
+      - name: Publish tagged GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.sha256 --generate-notes --verify-tag --repo "$GITHUB_REPOSITORY"

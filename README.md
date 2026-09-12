@@ -2,9 +2,32 @@
 
 Skills and a CLI for the [Astria](https://www.astria.ai) API — AI image & video
 generation, fine-tuning (tunes / references), prompt writing, and automated
-photoshoot packs — packaged as a Claude Code plugin.
+photoshoot packs — packaged as native OpenAI/Codex and Claude plugins.
 
-## Install
+## Install in Codex
+
+Add this repository marketplace, then install Astria:
+
+```bash
+codex plugin marketplace add astriaai/skills --ref main
+codex plugin add astria@astria
+```
+
+To fetch a newer repository snapshot:
+
+```bash
+codex plugin marketplace upgrade astria
+codex plugin add astria@astria
+```
+
+Start a new task after installing or upgrading so the refreshed skills load.
+
+ChatGPT workspace administrators can import `astriaai/skills` as a GitHub
+marketplace. Imported marketplaces sync daily and can be refreshed immediately
+with **Sync now**. Public web, desktop, and mobile availability begins after
+OpenAI reviews and publishes the plugin in the universal directory.
+
+## Install in other agents
 
 The quickest way — cross-agent, works in Claude Code, Cursor, and other
 agents:
@@ -13,7 +36,7 @@ agents:
 npx skills add astriaai/skills
 ```
 
-Or, inside Claude Code, install via the plugin marketplace:
+Inside Claude Code, install via the plugin marketplace:
 
 ```
 /plugin marketplace add astriaai/skills
@@ -43,6 +66,22 @@ curl -fsSL https://raw.githubusercontent.com/astriaai/cli/main/install.sh | sh
 
 The plugin bundles a vendored copy of that same CLI, so a marketplace install
 needs nothing extra.
+
+## Developing and releasing
+
+Run `scripts/sync-plugin.sh` after adding or renaming a skill. It rebuilds the
+self-contained OpenAI plugin in `plugins/astria` and refreshes all
+`~/.claude/skills` and `~/.codex/skills` symlinks. CLI synchronization invokes
+it automatically.
+
+Prepare releases with one command:
+
+```bash
+scripts/release-plugin.sh X.Y.Z
+```
+
+See [`docs/PUBLISHING.md`](docs/PUBLISHING.md) for the complete publishing and
+upgrade flow.
 
 ## Requirements
 

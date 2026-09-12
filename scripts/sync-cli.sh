@@ -30,3 +30,7 @@ chmod 0755 "$DEST"
 
 echo "Vendored astria CLI ($ORIGIN) -> $DEST"
 "$DEST" --version
+
+# The OpenAI plugin vendors the same CLI, and local developer skills must stay
+# linked after every CLI release.
+"$(dirname "$0")/sync-plugin.sh"
