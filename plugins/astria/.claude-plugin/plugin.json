@@ -1,7 +1,7 @@
 {
   "name": "astria",
   "description": "Generate and inspect images and video, manage references and packs, and hand agent sessions into Astria. Bundles the `astria` CLI — run `astria login` once.",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "author": {
     "name": "Astria",
     "url": "https://www.astria.ai"

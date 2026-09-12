@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import re
+import struct
 from pathlib import Path
 
 
@@ -64,6 +65,14 @@ def main():
     require(interface == codex["interface"], "portable and Codex interface metadata differ")
     require(len(interface["defaultPrompt"]) <= 3, "at most three default prompts are allowed")
     require(all(len(prompt) <= 128 for prompt in interface["defaultPrompt"]), "default prompt exceeds 128 characters")
+    for field in ("composerIcon", "logo", "logoDark"):
+        require(field in interface, f"interface.{field} is required")
+        asset = PLUGIN_ROOT / interface[field].removeprefix("./")
+        require(asset.is_file(), f"interface.{field} does not exist: {interface[field]}")
+        contents = asset.read_bytes()
+        require(contents.startswith(b"\x89PNG\r\n\x1a\n"), f"interface.{field} must be a PNG")
+        width, height = struct.unpack(">II", contents[16:24])
+        require(width == height, f"interface.{field} must be square, found {width}x{height}")
 
     marketplace_entry = codex_marketplace["plugins"][0]
     require(codex_marketplace["name"] == "astria", "Codex marketplace name must be astria")

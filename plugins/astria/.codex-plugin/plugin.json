@@ -1,6 +1,6 @@
 {
   "name": "astria",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Create and manage Astria image and video generations, references, prompts, and reusable photoshoot packs.",
   "author": {
     "name": "Astria",
@@ -20,7 +20,7 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Astria",
-    "shortDescription": "AI photoshoots, images, and video",
+    "shortDescription": "AI photoshoots, images & video",
     "longDescription": "Create consistent image and video generations with Astria, manage model and product references, improve prompts, and build reusable photoshoot workflows.",
     "developerName": "Astria",
     "category": "Creativity",
@@ -31,6 +31,9 @@
     "websiteURL": "https://www.astria.ai",
     "privacyPolicyURL": "https://www.astria.ai/privacy",
     "termsOfServiceURL": "https://www.astria.ai/terms",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png",
+    "logoDark": "./assets/logo-dark.png",
     "defaultPrompt": [
       "Create a fashion lookbook from my product references.",
       "Generate consistent headshots from my photos.",
