@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Test release tooling
+        run: python3 -m unittest discover -s tests -v
       - name: Refresh generated OpenAI plugin
         run: scripts/sync-plugin.sh --no-local-links
       - name: Require committed plugin output

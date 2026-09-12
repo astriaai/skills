@@ -74,11 +74,19 @@ self-contained OpenAI plugin in `plugins/astria` and refreshes all
 `~/.claude/skills` and `~/.codex/skills` symlinks. CLI synchronization invokes
 it automatically.
 
-Prepare releases with one command:
+Preview or publish a release with the guarded release driver:
 
 ```bash
-scripts/release-plugin.sh X.Y.Z
+scripts/release-driver.py X.Y.Z --dry-run
+scripts/release-driver.py X.Y.Z --publish
 ```
+
+The publish mode requires a clean, up-to-date `main`, prepares and validates
+the plugin, creates an explicit release commit and annotated tag, pushes both
+atomically, waits for GitHub Actions, verifies the published checksum, and
+refreshes the local Codex installation. OpenAI directory review and publication
+remain portal actions because OpenAI does not expose them through a supported
+CLI or API.
 
 See [`docs/PUBLISHING.md`](docs/PUBLISHING.md) for the complete publishing and
 upgrade flow.

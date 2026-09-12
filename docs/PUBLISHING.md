@@ -1,21 +1,33 @@
 # Publishing the Astria plugin
 
-## Prepare a release
+## Publish a release
 
-Run the only supported release command:
+Start with a clean `main` branch whose HEAD matches `origin/main`, then preview
+the release without changing the repository:
 
 ```bash
-scripts/release-plugin.sh X.Y.Z
+scripts/release-driver.py X.Y.Z --dry-run
 ```
 
+Publish with:
+
+```bash
+scripts/release-driver.py X.Y.Z --publish
+```
+
+The driver fetches tags and `origin/main`, refuses dirty, detached, stale, or
+already-tagged releases, then runs the existing `release-plugin.sh` preparation.
+It commits only the generated plugin and release metadata, creates an annotated
+tag, and atomically pushes the branch and tag. It waits for the tagged GitHub
+Actions run, verifies the release archive against both its published checksum
+and the local build, reinstalls `astria@astria`, and prints the OpenAI Platform
+URL for the manual directory step. Use `--skip-local-install` only on a machine
+that does not have the Codex marketplace configured.
+
+`release-plugin.sh` remains the lower-level prepare-only command for debugging.
 It updates the Claude and OpenAI versions together, materializes the native
 plugin under `plugins/astria`, refreshes every local Claude and Codex skill
 symlink, validates source parity, and writes an upload-ready archive to `dist/`.
-
-Commit the source and generated plugin together, tag the same version as
-`vX.Y.Z`, and push. GitHub Actions rejects stale generated output, attaches the
-archive and checksum to the tagged GitHub release, and leaves a build artifact
-on every main-branch build.
 
 Whenever the vendored CLI changes, `scripts/sync-cli.sh` invokes the same plugin
 sync automatically. Adding or renaming a skill requires updating the existing
