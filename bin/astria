@@ -1399,6 +1399,29 @@ def cmd_inspect_video(args, cfg):
     emit(inspect_video(cfg, payload, workspace=args.workspace))
 
 
+def cmd_inspect(args, cfg):
+    if remote_url(args.source):
+        if not args.source.startswith("https://"):
+            die("image URL must use HTTPS")
+        image_url = args.source
+    else:
+        image_url = direct_upload_records(cfg, [args.source])[0]["public_url"]
+
+    form = [field("file_url", image_url)]
+    form.extend(field("names[]", name) for name in args.name or [])
+    result = request(
+        cfg,
+        "POST",
+        "/images/describe",
+        form=form,
+        workspace=args.workspace,
+        timeout=125,
+    )
+    if not isinstance(result, dict) or not str(result.get("description") or "").strip():
+        raise AstriaError("image inspection returned no description")
+    emit(result)
+
+
 # --------------------------------------------------------------------------
 # commands — packs / workspaces
 # --------------------------------------------------------------------------
@@ -2302,6 +2325,13 @@ def build_parser():
     p.add_argument("--tune-id", action="append", metavar="ID",
                    help="reference whose appearance should be removed from the description (repeatable)")
     p.set_defaults(func=cmd_inspect_video)
+
+    p = sub.add_parser("inspect", parents=[ws_parent],
+                       help="describe an image as image-generation prompt text")
+    p.add_argument("source", help="local image file or public HTTPS image URL")
+    p.add_argument("--name", action="append",
+                   help="reference name whose appearance should be removed from the description (repeatable)")
+    p.set_defaults(func=cmd_inspect)
 
     # download — pull a prompt's rendered images/videos to a local directory
     p = sub.add_parser("download", parents=[ws_parent],
