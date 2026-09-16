@@ -1,7 +1,6 @@
 ---
 name: templatize-page
-description: Use when the user asks to turn a fashion / lookbook webpage into an Astria pack — scrapes the page, drops product-only shots, turns the remaining lifestyle photos into pose references, and builds one swap prompt per pose. Two variants — shoe-swap (barefoot edit, swap the footwear) and general-pose (silhouette edit, swap any items the user picks — model, shoes, outfit, background…). Trigger phrases — "templatize this page", "make a pack from this lookbook", "/templatize-page URL".
-allowed-tools: Bash(astria:*), Bash(python3:*), Bash(curl:*), Bash(mkdir:*), Read, Write, AskUserQuestion
+description: Use when the user asks to turn a fashion / lookbook webpage into an Astria pack — scrapes the page, drops product-only shots, turns the remaining lifestyle photos into pose references, and builds one swap prompt per pose. Two variants — shoe-swap (barefoot edit, swap the footwear) and general-pose (silhouette edit, swap any items the user picks — model, shoes, outfit, background…). Trigger phrases — "templatize this page", "make a pack from this lookbook", "/templatize-page <url>".
 ---
 
 # Templatize Page

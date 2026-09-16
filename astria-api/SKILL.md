@@ -286,8 +286,7 @@ astria variate https://example.com/source.mp4 \
 
 `astria download` saves a prompt's rendered assets (images, or `video/mp4`) to a
 local directory. It works from a **prompt id alone** — no tune id needed — and
-fetches each prompt fresh from the API, so assets that finished rendering since
-the last `cache refresh` are picked up.
+fetches each prompt fresh from the API, so newly rendered assets are included.
 
 ```bash
 astria download 555 556 557                       # ids as arguments
@@ -484,50 +483,6 @@ astria agent handoff -w 42 \
 session, prints its HTTPS deep link, and opens it with `--open`. Imported skills
 are reviewable session-scoped references; Astria does not silently install them
 into the shared workspace skill directory.
-
-## Cache (local snapshot + query layer)
-
-`astria cache refresh` snapshots tunes/prompts/packs/user into `./.cache/ws_<slug>/`
-so repeated lookups are instant. Each refresh writes both `<resource>.json` files
-**and** a SQLite database `cache.db` with indexed `tunes`, `prompts`, `packs`
-tables. `astria cache refresh tunes` refreshes one resource; `astria cache path`
-prints the directory.
-
-```bash
-astria cache refresh                 # pull everything → JSON files + cache.db
-astria cache refresh --force         # refresh even if the cache is still fresh
-astria cache refresh prompts         # refresh just one resource
-astria cache path                    # print the cache directory
-```
-
-### Query the local cache (no API calls)
-
-`get`, `find`, `uses` and `stats` read **only** `cache.db` — never the API — so
-an agent can cross-reference tunes/prompts/packs instantly. If the DB is missing
-they tell you to run `astria cache refresh` first. All emit JSON.
-
-```bash
-astria cache get tunes 1234              # one record (full JSON) by id
-astria cache get prompts 42367297
-astria cache get packs 4001
-
-astria cache find tunes --name woman --title "Red Dress"   # substring filters
-astria cache find prompts --pack-id 7 --tune-id 99 --text hat
-astria cache find packs --main-class dress --title boot
-
-astria cache uses 4636200                # prompts whose text references tune 4636200
-astria cache stats                       # row counts per table + cache age
-```
-
-`find` filters are substring matches except `--pack-id` / `--tune-id`, which are
-exact. `uses` cross-references a tune id against prompt text — it matches only
-prompts that embed the id inside a reference token like `<faceid:4636200:1>`
-or `<lora:4636200:1>`, not bare mentions of the number.
-
-The SQLite schema: each of `tunes` / `prompts` / `packs` has the useful lookup
-columns as real indexed columns plus a `json` TEXT column holding the complete
-record (`tunes`: id, name, title; `prompts`: id, text, pack_id, tune_id,
-num_images, aspect_ratio, resolution; `packs`: id, title, slug, main_class_name).
 
 ## Raw API escape hatch
 
