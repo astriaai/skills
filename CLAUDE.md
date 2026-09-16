@@ -26,7 +26,9 @@ README.md                           install + usage
 ```
 
 Adding or renaming a skill: create/rename its top-level `<name>/SKILL.md`
-directory and update the `skills` array in `.claude-plugin/marketplace.json`.
+directory and add `"./<name>"` to the `skills` array in
+`.claude-plugin/marketplace.json` (plain `./`-prefixed path strings — the
+marketplace schema rejects bare names and `{name, path}` objects).
 
 ## The `astria` CLI
 

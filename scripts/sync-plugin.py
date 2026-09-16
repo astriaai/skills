@@ -47,7 +47,7 @@ def copy_file(source, destination, executable=False):
 
 def skill_sources():
     plugin = read_json(CLAUDE_MARKETPLACE)["plugins"][0]
-    return [(entry["name"], ROOT / entry["path"]) for entry in plugin["skills"]]
+    return [(Path(entry).name, ROOT / entry) for entry in plugin["skills"]]
 
 
 def main():

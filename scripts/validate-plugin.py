@@ -81,7 +81,7 @@ def main():
     require(marketplace_entry["policy"] == {"installation": "AVAILABLE", "authentication": "ON_INSTALL"}, "Codex marketplace policy is incorrect")
 
     sources = {
-        entry["name"]: ROOT / entry["path"]
+        Path(entry).name: ROOT / entry
         for entry in claude_marketplace["plugins"][0]["skills"]
     }
     generated = {path.name: path for path in (PLUGIN_ROOT / "skills").iterdir() if path.is_dir()}
