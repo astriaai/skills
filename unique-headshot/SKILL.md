@@ -11,7 +11,7 @@ Generate realistic, unique face headshots for AI model creation. No reference tu
 ## Prompt Template
 
 ```
-Close-up studio headshot of a [age]-year-old [ethnicity/heritage] [gender] with [skin_tone] skin, [skin_details], [eye_description], [nose_description], [face_structure], [unique_feature], [hair_description]. Bare shoulders, no clothing visible, no jewelry. [expression], looking at the camera. Clean white background #fff, [lighting], natural realistic skin detail, beauty headshot
+Close-up studio headshot of a [age]-year-old [ethnicity/heritage] [gender] with [skin_tone] skin, [skin_details], [eye_description], [nose_description], [face_structure], [unique_feature], [hair_description]. Bare shoulders, no clothing visible, no jewelry. [expression], looking at the camera. Clean white background #fff, [lighting], fine natural skin texture and an even, unmarked complexion, beauty headshot
 ```
 
 ## Slot Definitions
@@ -40,10 +40,11 @@ casting choice, never a default. Rules:
   "of Andean descent", "of Han Chinese descent"
 
 ### Skin
-Always pair a **tone** with a **texture/detail**:
+Pair a **tone** with subtle **texture/detail**. Default to an even complexion with fine natural pore texture; distinctive skin markings are optional and only included when requested:
 - **Tones**: porcelain, fair, light olive, olive-tan, warm golden-tan, cinnamon-brown, warm caramel, olive-bronze, coppery-bronze, warm umber, deep dark, dark mahogany, ebony
 - **Undertones**: pink flush, cool blue-black undertone, warm golden undertone, cool undertone
-- **Details** (pick 1-2): dense freckles across cheeks and nose, faint childhood freckles on nose bridge only, visible pores, natural sheen, light freckles, natural hyperpigmentation patchwork, scattered sun freckles, visible blue veins at temples, peach fuzz on jawline
+- **Default details** (pick 1): fine natural pore texture, subtle natural sheen, soft peach fuzz on jawline
+- **Optional markings** (only when requested): freckles, beauty marks, moles, scars, hyperpigmentation
 
 ### Eyes
 Combine **shape**, **color**, and **distinguishing trait**:
@@ -62,8 +63,7 @@ Combine **shape** with **defining bone structure**:
 ### Unique Features (pick 1-2 for distinctiveness)
 These are critical for making each face unique:
 - pronounced dimple on left cheek only
-- faint scar across left eyebrow
-- subtle beauty mark on cheek
+- one eyebrow set slightly higher than the other
 - thick arched eyebrows that nearly meet
 - asymmetric face with one slightly higher cheekbone
 - slightly asymmetric smile
@@ -117,9 +117,9 @@ Vary lighting for natural diversity:
 3. **Default parameters**: `--num-images 2 --aspect-ratio 1:1` (Recraft has no `--resolution` — that flag is Gemini-only)
 4. **Never repeat the same ethnicity/heritage** in a batch, and never lean on one
    region across batches — check your last few prompts and move on
-5. **Every prompt must have at least one unique distinguishing feature** (scar, dimple, beauty mark, asymmetry, etc.)
+5. **Every prompt must have at least one unique distinguishing feature** in facial geometry or expression (dimple, brow shape, asymmetric smile, cupid's bow, etc.). Do not use a skin mark to satisfy this rule. Unless the user requests one, omit moles, beauty marks, freckles, and other localized pigmentation from the prompt. Describe natural texture with pores or sheen without implying pigmented spots. If a skin marking is explicitly requested, adapt the default suffix to accommodate it.
 6. **Hair is always pulled back** — no hair framing or covering the face
-7. **Fixed suffix**: `Bare shoulders, no clothing visible, no jewelry. [expression], looking at the camera. Clean white background #fff, [lighting], natural realistic skin detail, beauty headshot`
+7. **Default suffix**: `Bare shoulders, no clothing visible, no jewelry. [expression], looking at the camera. Clean white background #fff, [lighting], fine natural skin texture and an even, unmarked complexion, beauty headshot`
 8. **No photographer references or magazine names** in the prompt — keep it clean and generic
 
 ## Batch Generation
@@ -134,16 +134,16 @@ When generating multiple unique headshots, maximize diversity:
 ## Example Prompts
 
 **Prompt 1:**
-Close-up studio headshot of a 25-year-old Irish woman with cool-toned fair skin, dense freckles across cheeks and nose, deep-set hazel eyes, strong square jaw, auburn red hair slicked back into a neat low chignon. Bare shoulders, no clothing visible, no jewelry. Composed knowing expression, looking at the camera. Clean white background #fff, soft diffused studio lighting, natural realistic skin detail, beauty headshot
+Close-up studio headshot of a 25-year-old Irish woman with cool-toned fair skin and fine natural pore texture, deep-set hazel eyes, strong square jaw and a pronounced cupid's bow, auburn red hair slicked back into a neat low chignon. Bare shoulders, no clothing visible, no jewelry. Composed knowing expression, looking at the camera. Clean white background #fff, soft diffused studio lighting, fine natural skin texture and an even, unmarked complexion, beauty headshot
 
 **Prompt 2:**
-Close-up studio headshot of a 22-year-old Ethiopian woman with warm umber skin, large expressive round eyes, narrow bridge nose, defined cupid's bow, long neck, dark hair pulled into a smooth high ballerina bun. Bare shoulders, no clothing visible, no jewelry. Soft parted lips, steady gaze, looking at the camera. Clean white background #fff, even soft studio lighting, realistic skin texture with natural sheen, beauty headshot
+Close-up studio headshot of a 22-year-old Ethiopian woman with warm umber skin, large expressive round eyes, narrow bridge nose, defined cupid's bow, long neck, dark hair pulled into a smooth high ballerina bun. Bare shoulders, no clothing visible, no jewelry. Soft parted lips, steady gaze, looking at the camera. Clean white background #fff, even soft studio lighting, fine natural skin texture and an even, unmarked complexion, beauty headshot
 
 **Prompt 3:**
-Close-up studio headshot of a 27-year-old Mexican woman of Zapotec descent with warm caramel skin and visible pores, wide-set dark brown almond eyes with thick lashes, a strong straight nose, an oval face with high rounded cheekbones and a small rounded chin, a pronounced dimple on the left cheek only, glossy black hair swept back into a sleek twisted bun at the nape. Bare shoulders, no clothing visible, no jewelry. Poised neutral expression, looking at the camera. Clean white background #fff, soft ring light, natural realistic skin detail, beauty headshot
+Close-up studio headshot of a 27-year-old Mexican woman of Zapotec descent with warm caramel skin and fine natural pore texture, wide-set dark brown almond eyes with thick lashes, a strong straight nose, an oval face with high rounded cheekbones and a small rounded chin, a pronounced dimple on the left cheek only, glossy black hair swept back into a sleek twisted bun at the nape. Bare shoulders, no clothing visible, no jewelry. Poised neutral expression, looking at the camera. Clean white background #fff, soft ring light, fine natural skin texture and an even, unmarked complexion, beauty headshot
 
 **Prompt 4:**
-Close-up studio headshot of a 24-year-old Korean woman with pale milky skin, small monolid eyes, round face, soft jawline, subtle freckles on nose bridge, straight black hair pulled back into a sleek tight ponytail. Bare shoulders, no clothing visible, no jewelry. Slight closed-mouth smile, looking at the camera. Clean white background #fff, flat diffused studio lighting, realistic pore detail, natural skin, beauty headshot
+Close-up studio headshot of a 24-year-old Korean woman with pale milky skin and subtle natural sheen, small monolid eyes, round face, soft jawline and naturally arched eyebrows, straight black hair pulled back into a sleek tight ponytail. Bare shoulders, no clothing visible, no jewelry. Slight closed-mouth smile, looking at the camera. Clean white background #fff, flat diffused studio lighting, fine natural skin texture and an even, unmarked complexion, beauty headshot
 
 **Prompt 5:**
-Close-up studio headshot of a 31-year-old Norwegian man with cool-toned fair skin and light stubble, hooded blue-grey eyes with pale lashes, a prominent Roman nose with a defined bridge bump, an angular face with a strong square jaw, a faint scar across the left eyebrow, ash-blonde hair brushed back flat. Bare shoulders, no clothing visible, no jewelry. Calm direct gaze, looking at the camera. Clean white background #fff, soft butterfly lighting, natural realistic skin detail, beauty headshot
+Close-up studio headshot of a 31-year-old Norwegian man with cool-toned fair skin and light stubble, hooded blue-grey eyes with pale lashes, a prominent Roman nose with a defined bridge bump, an angular face with a strong square jaw, one eyebrow set slightly higher than the other, ash-blonde hair brushed back flat. Bare shoulders, no clothing visible, no jewelry. Calm direct gaze, looking at the camera. Clean white background #fff, soft butterfly lighting, fine natural skin texture and an even, unmarked complexion, beauty headshot
