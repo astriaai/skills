@@ -1,6 +1,6 @@
 ---
 name: store-photoshoot
-description: Use when turning a brand's whole online store (Shopify or WooCommerce) into a reusable Astria AI photoshoot — crawl the catalog, extract the brand's DNA, cast avatars, and build packs that re-shoot the entire collection (and every future drop) in the brand's own look. Trigger phrases — "build a photoshoot from my store", "crawl STORE_URL and make packs", "AI product photography for BRAND", "re-shoot our catalog". For a single lookbook/collection PAGE use `templatize-page` instead.
+description: Use when turning a brand's whole online store (Shopify or WooCommerce) into a reusable Astria AI photoshoot — crawl the catalog, extract the brand's DNA, cast avatars, and build packs that re-shoot the entire collection (and every future drop) in the brand's own look. Trigger phrases — "build a photoshoot from my store", "crawl STORE_URL and make packs", "AI product photography for BRAND", "re-shoot our catalog".
 allowed-tools: Bash(astria:*), Bash(python3:*), Bash(curl:*), Read, Write, AskUserQuestion
 ---
 
@@ -32,7 +32,6 @@ page.
 
 Related skills: **astria-api** (the CLI), **unique-headshot** (avatar casting),
 **prompt-writing** (prompt grammar & parameters), **packs-guide** (packs),
-**templatize-page** (silhouette/pose-swap technique, single page),
 **landing-page-editor** (the `/w/:slug` page).
 
 ---
@@ -176,7 +175,7 @@ astria tunes create -w <id> --title "<SKU or product title>" --name <class> \
   Include the back photo only when the battery has back views. One tune per
   colorway. Keep the SKU code in the title — it's the join key back to the shop.
 - Optionally register support tunes: a `background` set plate, `pose` refs
-  (OpenPose skeletons or black product silhouettes — see **templatize-page**),
+  (OpenPose skeletons or black product silhouettes),
   brand `label`/`text` lockups for print fidelity, props (`chair`, `car`).
 
 ## Phase 7 — Author the packs (the core)
@@ -258,7 +257,7 @@ natural fabric behavior, imperfect drape, soft analog 35mm grain`). Formats
 3. **Silhouette lock** (to clone the brand's *existing* photography stance-for-
    stance): threshold a real catalog photo to a black silhouette, register as
    `pose`, prompt `replace the <faceid:POSE:1> pose … Keep the pose exactly as
-   in the silhouette. Ignore the pose from the outfit.` (see **templatize-page**).
+   in the silhouette. Ignore the pose from the outfit.`
 
 ### 7.5 Video add-on (optional)
 

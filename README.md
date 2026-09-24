@@ -106,7 +106,6 @@ upgrade flow.
 | **unique-headshot** | Generate diverse, realistic headshots with no reference |
 | **navigation** | Astria app sitemap |
 | **landing-page-editor** | Edit a workspace's magazine-style landing page |
-| **templatize-page** | Turn a lookbook URL into a pose-swap pack |
 | **storyboard** | Build a text-only cinematic video sequence from a draft or ordered image references |
 | **artboard** | Legacy alias for Storyboard |
 

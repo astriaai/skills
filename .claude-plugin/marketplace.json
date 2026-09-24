@@ -35,7 +35,6 @@
         "./unique-headshot",
         "./navigation",
         "./landing-page-editor",
-        "./templatize-page",
         "./store-photoshoot",
         "./storyboard",
         "./artboard"
