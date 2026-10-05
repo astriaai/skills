@@ -90,6 +90,7 @@ def main():
         require(file_map(source) == file_map(generated[name]), f"generated skill differs from source: {name}")
 
     require((ROOT / "bin" / "astria").read_bytes() == (PLUGIN_ROOT / "bin" / "astria").read_bytes(), "generated CLI is stale")
+    require(not (PLUGIN_ROOT / "hooks").exists(), "OpenAI directory packages cannot contain hooks")
     require(not list(PLUGIN_ROOT.rglob("*.pyc")), "generated plugin contains .pyc files")
     require(not list(PLUGIN_ROOT.rglob("__pycache__")), "generated plugin contains __pycache__")
 

@@ -34,6 +34,10 @@ sync automatically. Adding or renaming a skill requires updating the existing
 Claude marketplace list; the sync then updates both the native plugin and every
 developer symlink.
 
+The OpenAI package omits session hooks because the public directory does not
+accept packages containing hooks. Claude installations retain the canonical
+`hooks/` directory at the repository root.
+
 ## Distribution and upgrades
 
 - Codex developers can install this repository marketplace and reinstall the

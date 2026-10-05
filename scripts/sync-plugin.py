@@ -72,7 +72,10 @@ def main():
             shutil.rmtree(staging)
 
     copy_file(ROOT / "bin" / "astria", PLUGIN_ROOT / "bin" / "astria", executable=True)
-    sync_tree(ROOT / "hooks", PLUGIN_ROOT / "hooks")
+    # OpenAI directory submissions cannot contain hooks. Claude loads the
+    # canonical hooks from the repository root instead.
+    if (PLUGIN_ROOT / "hooks").exists():
+        shutil.rmtree(PLUGIN_ROOT / "hooks")
     sync_tree(ROOT / ".claude-plugin", PLUGIN_ROOT / ".claude-plugin")
 
     print(f"Synced {len(sources)} skills and the Astria CLI -> {PLUGIN_ROOT}")
