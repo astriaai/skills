@@ -120,6 +120,33 @@ astria prompts update 555 --model nano-banana-pro --base-pack-id 88   # bind as 
   `--user-id`, `--orig-prompt-id`, `--text`, and the flags `--liked`,
   `--today`, `--is-video`, `--is-api`.
 
+### Image review comments
+
+Request image comments with the repeatable `--expand` option:
+
+```bash
+astria prompts list -w 17 --expand prompt.comments --limit 100
+astria prompts get 555 -w 17 --tune 123 --expand prompt.comments
+astria prompts get 555 -w 17 --tune 123 --expand comments --expand prompt.debug_images
+astria api GET /prompts -w 17 --query 'expand[]=prompt.comments'
+astria api GET /tunes/123/prompts/555 -w 17 --query 'expand[]=comments'
+```
+
+`comments` is an alias for `prompt.comments`. The API also accepts the scalar
+query `expand=prompt.comments`, or repeated `expand[]` values to combine
+expansions. Without this expansion, responses omit the `comments` field.
+
+Each prompt returns a flat `comments` array, oldest first, containing both open
+and resolved comments on its available images. Each entry includes `id`,
+`body`, `author`, `author_avatar_url`, `created_at`, `resolved_at`, `resolved_by`,
+`workspace_id`, `prompt_id`, `attachment_id`, `blob_id`, `image_url`, `filename`,
+and `image_review_id`. Use `blob_id` or `attachment_id` to associate a comment
+with an image, and `resolved_at` to determine whether it is resolved.
+
+Comments are limited to workspaces the authenticated account belongs to. Use
+`prompts list --expand prompt.comments` to retrieve comments for a page in one
+request instead of fetching each image separately.
+
 ## Generate images
 
 ```bash
