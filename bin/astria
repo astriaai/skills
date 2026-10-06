@@ -17,6 +17,7 @@ import argparse
 import ast
 import base64
 import concurrent.futures
+import contextvars
 import hashlib
 import json
 import mimetypes
@@ -31,7 +32,7 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
-from urllib.parse import urlencode, urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 VERSION = "1.19.1"
 
@@ -88,6 +89,247 @@ MODEL_ENV = {
 }
 MODELS_TTL_DEFAULT = 86400
 
+# Shared request contract. Rails consumes the JSON export of these definitions;
+# CLI-only uploads, caching and waiting remain in the terminal handlers.
+API_OPERATIONS = {'list_models': {'method': 'GET',
+                 'path': '/cli/models',
+                 'fields': [],
+                 'target': 'query',
+                 'result': {'object': {'default': ['default', 'gemini'],
+                                       'default_video_model': ['default_video_model', None],
+                                       'models': ['models', {}],
+                                       'video_models': ['video_models', {}]},
+                            'constants': {'note': 'this is the curated set of popular models only — any '
+                                                  '--model also accepts a raw tune id directly. Browse every '
+                                                  'partner model and its tune id at '
+                                                  'astria.ai/gallery/tunes?branch=partner-1 (or run `astria '
+                                                  'tunes list --gallery --branch partner-1`).'},
+                            'choices': {'source': ['builtin', 'built-in (offline)', 'server']}},
+                 'no_workspace': True,
+                 'auth': False},
+ 'list_workspaces': {'method': 'GET',
+                     'path': '/workspaces.json',
+                     'fields': [],
+                     'target': 'query',
+                     'result': {'pick': ['id', 'title', 'slug']},
+                     'no_workspace': True},
+ 'list_references': {'method': 'GET',
+                     'path': '/tunes',
+                     'fields': [['title', 'title', 'truthy'],
+                                ['name[]', 'name', 'array'],
+                                ['limit', 'limit', 'truthy'],
+                                ['offset', 'offset', 'truthy'],
+                                ['model_type', 'model_type', 'truthy'],
+                                ['branch', 'branch', 'truthy']],
+                     'target': 'query',
+                     'result': {'pick': ['id', 'title', 'name', 'model_type', 'orig_images']},
+                     'path_choice': ['gallery', '/gallery/tunes']},
+ 'get_reference': {'method': 'GET', 'path': '/tunes/{id}', 'fields': [], 'target': 'query', 'result': {}},
+ 'create_reference': {'method': 'POST',
+                      'path': '/tunes',
+                      'fields': [['tune[title]', 'title', 'value'],
+                                 ['tune[name]', 'name', 'value'],
+                                 ['tune[model_type]', 'model_type', 'value'],
+                                 ['tune[base_tune_id]', 'model_id', 'value'],
+                                 ['tune[characteristics]', 'description', 'description'],
+                                 ['tune[image_urls][]', 'image_url', 'array'],
+                                 ['tune[images][]', 'image', 'array']],
+                      'target': 'form',
+                      'result': {},
+                      'model': {'argument': 'model', 'output': 'model_id'},
+                      'requires_any': ['image_url', 'image']},
+ 'generate_images': {'method': 'POST',
+                     'path': '/tunes/{model_id}/prompts',
+                     'fields': [['prompt[text]', 'text', 'value'],
+                                ['prompt[num_images]', 'num_images', 'value'],
+                                ['prompt[seed]', 'seed', 'truthy'],
+                                ['prompt[film_grain]', 'film_grain', 'boolean'],
+                                ['prompt[aspect_ratio]', 'aspect_ratio', 'truthy'],
+                                ['prompt[resolution]', 'resolution', 'truthy'],
+                                ['prompt[input_image]', 'input_image', 'media'],
+                                ['prompt[mask_image]', 'mask_image', 'media'],
+                                ['prompt[pack_id]', 'pack_id', 'truthy'],
+                                ['prompt[base_pack_id]', 'base_pack_id', 'truthy']],
+                     'target': 'form',
+                     'result': {'first': True},
+                     'model': {'argument': 'model', 'output': 'model_id'},
+                     'references': {'argument': 'references', 'model': 'model_id', 'texts': ['text']},
+                     'image_count': {'argument': 'num_images',
+                                     'input': 'input_image',
+                                     'edit': 1,
+                                     'generate': 2}},
+ 'generate_video': {'method': 'POST',
+                    'path': '/tunes/{model_id}/prompts',
+                    'fields': [['prompt[text]', 'text', 'value'],
+                               ['prompt[num_images]', 'num_images', 'value'],
+                               ['prompt[seed]', 'seed', 'truthy'],
+                               ['prompt[film_grain]', 'film_grain', 'boolean'],
+                               ['prompt[aspect_ratio]', 'aspect_ratio', 'truthy'],
+                               ['prompt[resolution]', 'resolution', 'truthy'],
+                               ['prompt[input_image]', 'input_image', 'media'],
+                               ['prompt[mask_image]', 'mask_image', 'media'],
+                               ['prompt[pack_id]', 'pack_id', 'truthy'],
+                               ['prompt[base_pack_id]', 'base_pack_id', 'truthy'],
+                               ['prompt[video_model]', 'video_model', 'truthy'],
+                               ['prompt[video_prompt]', 'video_prompt', 'value'],
+                               ['prompt[image_references][]', 'image_references', 'media_array', 'prompt[image_reference_urls][]'],
+                               ['prompt[video_duration]', 'duration', 'truthy'],
+                               ['prompt[video_first_frame]', 'first_frame', 'media'],
+                               ['prompt[video_last_frame]', 'last_frame', 'media'],
+                               ['prompt[input_video]', 'input_video', 'media'],
+                               ['prompt[audio_reference]', 'audio_reference', 'media'],
+                               ['prompt[generate_audio]', 'generate_audio', 'boolean'],
+                               ['prompt[video_audio]', 'generate_audio', 'boolean']],
+                    'target': 'form',
+                    'result': {'first': True},
+                    'model': {'argument': 'model', 'output': 'model_id'},
+                    'references': {'argument': 'references',
+                                   'model': 'model_id',
+                                   'texts': ['text', 'video_prompt']},
+                    'image_count': {'argument': 'num_images',
+                                    'input': 'input_image',
+                                    'edit': 1,
+                                    'generate': 2}},
+ 'list_prompts': {'method': 'GET',
+                  'path': '/prompts',
+                  'fields': [['text', 'text', 'truthy'],
+                             ['pack_id', 'pack_id', 'truthy'],
+                             ['base_pack_id', 'base_pack_id', 'truthy'],
+                             ['tune_id', 'tune_id', 'truthy'],
+                             ['user_id', 'user_id', 'truthy'],
+                             ['orig_prompt_id', 'orig_prompt_id', 'truthy'],
+                             ['order_id', 'order_id', 'truthy'],
+                             ['expand[]', 'expand', 'array'],
+                             ['liked', 'liked', 'flag'],
+                             ['today', 'today', 'flag'],
+                             ['is_video', 'is_video', 'flag'],
+                             ['is_api', 'is_api', 'flag'],
+                             ['limit', 'limit', 'truthy'],
+                             ['offset', 'offset', 'truthy']],
+                  'target': 'query',
+                  'result': {'pick': ['id',
+                                      'text',
+                                      'num_images',
+                                      'cost_mc',
+                                      'images',
+                                      'aspect_ratio',
+                                      'resolution',
+                                      'pack_id',
+                                      'tune_id',
+                                      'order_id'],
+                             'expand': {'debug_images': ['debug_images',
+                                                         'debug_filenames',
+                                                         'debug_content_types'],
+                                        'prompt.debug_images': ['debug_images',
+                                                                'debug_filenames',
+                                                                'debug_content_types'],
+                                        'comments': ['comments'],
+                                        'prompt.comments': ['comments']}},
+                  'path_choice': ['tune_id', '/tunes/{tune_id}/prompts']},
+ 'get_prompt': {'method': 'GET',
+                'path': '/tunes/{model_id}/prompts/{id}',
+                'fields': [['expand[]', 'expand', 'array']],
+                'target': 'query',
+                'result': {},
+                'model': {'argument': 'model', 'output': 'model_id', 'fallback_argument': 'tune'}},
+ 'list_templates': {'method': 'GET',
+                    'path': '/packs',
+                    'fields': [['limit', 'limit', 'truthy'], ['offset', 'offset', 'truthy']],
+                    'target': 'query',
+                    'result': {'pick': ['id', 'title', 'slug', 'subtitle', 'main_class_name', 'costs']}},
+ 'get_template': {'method': 'GET', 'path': '/p/{slug}.json', 'fields': [], 'target': 'query', 'result': {}},
+ 'run_template': {'method': 'POST',
+                  'path': '/p/{slug}/tunes',
+                  'fields': [['tune[tune_ids][]', 'tune_id', 'ids'],
+                             ['tune[title]', 'title', 'truthy'],
+                             ['tune[name]', 'name', 'truthy'],
+                             ['tune[images][]', 'image', 'array'],
+                             ['tune[image_urls][]', 'image_url', 'array'],
+                             ['tune[brief]', 'brief', 'truthy'],
+                             ['tune[prompt_ids][]', 'prompt_ids', 'ids'],
+                             ['tune[prompt_attributes][num_images]', 'num_images', 'truthy'],
+                             ['tune[prompt_attributes][aspect_ratio]', 'aspect_ratio', 'truthy'],
+                             ['tune[prompt_attributes][resolution]', 'resolution', 'truthy'],
+                             ['tune[prompt_attributes][inpaint_faces]', 'inpaint_faces', 'boolean']],
+                  'target': 'form',
+                  'result': {},
+                  'requires_any': ['tune_id', 'title', 'name', 'image', 'image_url']}}
+
+
+def operation_path(definition, values):
+    path = definition["path"]
+    if "path_choice" in definition:
+        argument, alternative = definition["path_choice"]
+        if values.get(argument):
+            path = alternative
+    return re.sub(r"\{([^}]+)\}", lambda match: quote(str(values[match[1]]), safe=""), path)
+
+
+def operation_fields(name, values, resolved_media=None):
+    result = []
+    resolved_media = resolved_media or {}
+    for spec in API_OPERATIONS[name]["fields"]:
+        wire, argument, mode = spec[:3]
+        value = values.get(argument)
+        if value is None or (mode not in ("value", "boolean") and not value):
+            continue
+        if mode in ("truthy", "value"):
+            result.append(field(wire, value))
+        elif mode in ("boolean", "flag"):
+            result.append(field(wire, "true" if value else "false"))
+        elif mode == "array":
+            result.extend(field(wire, item) for item in value)
+        elif mode == "ids":
+            items = value if isinstance(value, list) else [value]
+            result.extend(field(wire, item) for raw in items for item in _id_list(raw))
+        elif mode == "description":
+            result.append(field(wire, json.dumps({"short_description": value}, ensure_ascii=False, separators=(",", ":"))))
+        elif mode == "media":
+            result.append(media_field(wire, value, resolved_media.get(argument, value)))
+        elif mode == "media_array":
+            result.extend(field(spec[3] if remote_url(original) else wire, resolved)
+                          for original, resolved in zip(value, resolved_media.get(argument, value)))
+        else:
+            raise AstriaError(f"Unknown operation field mode: {mode}")
+    return result
+
+
+def operation_result(definition, value, values):
+    spec = definition["result"]
+    if spec.get("first") and isinstance(value, list):
+        return value[0]
+    if "pick" in spec:
+        keys = list(spec["pick"])
+        for expanded in values.get("expand") or []:
+            keys.extend(spec.get("expand", {}).get(expanded, []))
+        return [{key: item.get(key) for key in dict.fromkeys(keys)} for item in value]
+    if "object" in spec:
+        projected = {key: value.get(source, default) for key, (source, default) in spec["object"].items()}
+        projected.update(spec.get("constants", {}))
+        projected.update({key: yes if value.get(condition) else no
+                          for key, (condition, yes, no) in spec.get("choices", {}).items()})
+        return projected
+    return value
+
+
+def execute_api_operation(name, args, cfg, *, extra_fields=None):
+    definition = API_OPERATIONS[name]
+    values = vars(args).copy()
+    if "model" in definition:
+        model = definition["model"]
+        values[model["output"]] = (values.get(model["fallback_argument"])
+            if "fallback_argument" in model and not values.get(model["argument"])
+            else resolve_model(cfg, values.get(model["argument"])))
+    fields = operation_fields(name, values) + (extra_fields or [])
+    options = {definition["target"]: fields}
+    if definition.get("no_workspace"):
+        options["no_workspace"] = True
+    else:
+        options["workspace"] = values.get("workspace")
+    result = request(cfg, definition["method"], operation_path(definition, values), **options)
+    return operation_result(definition, result, values)
+
+
 # --------------------------------------------------------------------------
 # errors / output
 # --------------------------------------------------------------------------
@@ -95,13 +337,22 @@ class AstriaError(Exception):
     pass
 
 
+_operation_output = contextvars.ContextVar("astria_operation_output", default=None)
+
+
 def die(msg, code=1):
+    if _operation_output.get() is not None:
+        raise AstriaError(msg)
     print(f"astria: {msg}", file=sys.stderr)
     sys.exit(code)
 
 
 def emit(obj):
     """Print a result as JSON on stdout — skills parse this."""
+    sink = _operation_output.get()
+    if sink is not None:
+        sink.append(obj)
+        return
     json.dump(obj, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
 
@@ -398,6 +649,8 @@ def current_executable_path(override=None):
 def model_catalog(cfg):
     """Model name -> tune id catalog: the cached /cli/models response (refreshed
     daily), falling back to built-in MODEL_TUNES when the endpoint is unreachable."""
+    if isinstance(cfg, OperationContext):
+        return request(cfg, "GET", "/cli/models", auth=False, no_workspace=True)
     record = load_models_cache()
     if models_cache_stale(record, cfg):
         record = fetch_models(cfg) or record
@@ -422,7 +675,7 @@ def resolve_model(cfg, name):
         return str(name)
     key = str(name).lower()
     # 1. environment override — the Astria web app injects these
-    if key in MODEL_ENV and os.environ.get(MODEL_ENV[key]):
+    if not isinstance(cfg, OperationContext) and key in MODEL_ENV and os.environ.get(MODEL_ENV[key]):
         return os.environ[MODEL_ENV[key]]
     # 2. explicit per-model override in the config file
     if cfg.get(f"{key}_tune_id"):
@@ -444,6 +697,9 @@ def resolve_model(cfg, name):
 # --------------------------------------------------------------------------
 def request(cfg, method, path, *, query=None, form=None, json_body=None, workspace=None,
             no_workspace=False, auth=True, timeout=120):
+    if isinstance(cfg, OperationContext):
+        return cfg.transport(method, path, query=query, form=form, json_body=json_body,
+                             workspace=workspace, no_workspace=no_workspace, auth=auth)
     url = base_url(cfg) + path
     if query:
         url += ("&" if "?" in url else "?") + urlencode(query, doseq=True)
@@ -816,18 +1072,7 @@ def cmd_models(args, cfg):
     record = fetch_models(cfg) if args.refresh else model_catalog(cfg)
     if record is None:
         die("could not refresh models from the server")
-    emit({
-        "default": record.get("default", "gemini"),
-        "default_video_model": record.get("default_video_model"),
-        "source": "built-in (offline)" if record.get("builtin") else "server",
-        "note": ("this is the curated set of popular models only — any --model "
-                 "also accepts a raw tune id directly. Browse every partner "
-                 "model and its tune id at astria.ai/gallery/tunes?branch=partner-1 "
-                 "(or run `astria tunes list --gallery --branch partner-1`)."),
-        "models": record.get("models", {}),
-        "video_models": record.get("video_models", {}),
-    })
-
+    emit(operation_result(API_OPERATIONS["list_models"], record, vars(args)))
 
 def cmd_upgrade(args, cfg):
     record = None if args.url else fetch_models(cfg)
@@ -846,45 +1091,17 @@ def cmd_upgrade(args, cfg):
 # commands — tunes / references
 # --------------------------------------------------------------------------
 def cmd_tunes_list(args, cfg):
-    query = []
-    if args.title:
-        query.append(("title", args.title))
-    for name in args.name or []:
-        query.append(("name[]", name))
-    if args.limit:
-        query.append(("limit", args.limit))
-    if args.offset:
-        query.append(("offset", args.offset))
-    if args.model_type:
-        query.append(("model_type", args.model_type))
-    if args.branch:
-        query.append(("branch", args.branch))
-    path = "/gallery/tunes" if args.gallery else "/tunes"
-    tunes = request(cfg, "GET", path, query=query, workspace=args.workspace)
-    emit([{k: t.get(k) for k in ("id", "title", "name", "model_type", "orig_images")} for t in tunes])
-
+    emit(execute_api_operation("list_references", args, cfg))
 
 def cmd_tunes_get(args, cfg):
-    emit(request(cfg, "GET", f"/tunes/{args.id}", workspace=args.workspace))
-
+    emit(execute_api_operation("get_reference", args, cfg))
 
 def cmd_tunes_create(args, cfg):
-    form = [
-        field("tune[title]", args.title),
-        field("tune[name]", args.name),
-        field("tune[model_type]", args.model_type),
-        field("tune[base_tune_id]", resolve_model(cfg, args.model)),
-    ]
-    if args.description:
-        form.append(field("tune[characteristics]", json.dumps({"short_description": args.description})))
-    for url in args.image_url or []:
-        form.append(field("tune[image_urls][]", url))
-    for signed_id in direct_uploads(cfg, args.image or []):
-        form.append(field("tune[images][]", signed_id))
     if not (args.image_url or args.image):
         die("provide at least one --image-url or --image")
-    emit(request(cfg, "POST", "/tunes", form=form, workspace=args.workspace))
-
+    values = vars(args).copy()
+    values["image"] = direct_uploads(cfg, args.image or [])
+    emit(execute_api_operation("create_reference", argparse.Namespace(**values), cfg))
 
 def cmd_tunes_update(args, cfg):
     form = []
@@ -903,35 +1120,10 @@ def cmd_tunes_update(args, cfg):
 # commands — prompts
 # --------------------------------------------------------------------------
 def cmd_prompts_list(args, cfg):
-    query = []
-    for key in ("text", "pack_id", "base_pack_id", "tune_id", "user_id", "orig_prompt_id", "order_id"):
-        value = getattr(args, key, None)
-        if value:
-            query.append((key, value))
-    for value in args.expand or []:
-        query.append(("expand[]", value))
-    for flag in ("liked", "today", "is_video", "is_api"):
-        if getattr(args, flag, False):
-            query.append((flag, "true"))
-    if args.limit:
-        query.append(("limit", args.limit))
-    if args.offset:
-        query.append(("offset", args.offset))
-    path = f"/tunes/{args.tune_id}/prompts" if args.tune_id else "/prompts"
-    prompts = request(cfg, "GET", path, query=query, workspace=args.workspace)
-    keys = ["id", "text", "num_images", "cost_mc", "images", "aspect_ratio", "resolution", "pack_id", "tune_id", "order_id"]
-    if set(args.expand or []) & {"debug_images", "prompt.debug_images"}:
-        keys += ["debug_images", "debug_filenames", "debug_content_types"]
-    if set(args.expand or []) & {"comments", "prompt.comments"}:
-        keys.append("comments")
-    emit([{k: p.get(k) for k in keys} for p in prompts])
-
+    emit(execute_api_operation("list_prompts", args, cfg))
 
 def cmd_prompts_get(args, cfg):
-    tune_id = resolve_model(cfg, args.model) if args.model else args.tune
-    query = [("expand[]", value) for value in args.expand or []]
-    emit(request(cfg, "GET", f"/tunes/{tune_id}/prompts/{args.id}", query=query, workspace=args.workspace))
-
+    emit(execute_api_operation("get_prompt", args, cfg))
 
 def cmd_prompts_update(args, cfg):
     tune_id = resolve_model(cfg, args.model) if args.model else args.tune
@@ -1020,17 +1212,14 @@ def reference_title(name, image):
 def create_reference_mentions(args, cfg, tune_id, reference_specs, resolved_images):
     mentions = []
     for (name, image), resolved in zip(reference_specs, resolved_images):
-        form = [
-            field("tune[title]", reference_title(name, image)),
-            field("tune[name]", name),
-            field("tune[model_type]", "faceid"),
-            field("tune[base_tune_id]", tune_id),
-            reference_image_field(image, resolved),
-        ]
-        tune = request(cfg, "POST", "/tunes", form=form, workspace=args.workspace)
+        values = {"title": reference_title(name, image), "name": name, "model_type": "faceid",
+                  "model_id": tune_id, "image_url": [image] if remote_url(image) else [],
+                  "image": [] if remote_url(image) else [resolved]}
+        definition = API_OPERATIONS["create_reference"]
+        tune = request(cfg, definition["method"], definition["path"],
+                       form=operation_fields("create_reference", values), workspace=args.workspace)
         mentions.append(f"<faceid:{tune['id']}:1> {tune['name']}")
     return mentions
-
 
 def prepend_reference_mentions(text, mentions):
     if text is None:
@@ -1040,88 +1229,45 @@ def prepend_reference_mentions(text, mentions):
 
 
 def _generate(args, cfg, video):
+    name = "generate_video" if video else "generate_images"
+    definition = API_OPERATIONS[name]
     reference_specs = parse_reference_specs(getattr(args, "references", None))
     tune_id = resolve_model(cfg, args.model)
-    prompt_media = [
-        ("prompt[input_image]", getattr(args, "input_image", None)),
-        ("prompt[mask_image]", getattr(args, "mask_image", None)),
-    ]
-    prompt_media = [(prefix, value) for prefix, value in prompt_media if value]
     image_references = args.image_references or [] if video else []
-    source_kinds = {"url" if remote_url(value) else "file" for value in image_references}
-    if len(source_kinds) > 1:
+    if len({"url" if remote_url(value) else "file" for value in image_references}) > 1:
         die("--image-reference cannot mix URLs and local files in one request")
-    video_media = []
-    if video:
-        video_media = [
-            ("prompt[video_first_frame]", args.first_frame),
-            ("prompt[video_last_frame]", args.last_frame),
-            ("prompt[input_video]", args.input_video),
-            ("prompt[audio_reference]", args.audio_reference),
-        ]
-        video_media = [(prefix, value) for prefix, value in video_media if value]
-
     reference_images = [image for _, image in reference_specs]
-    media_values = (
-        reference_images
-        + [value for _, value in prompt_media]
-        + image_references
-        + [value for _, value in video_media]
-    )
-    resolved_media = resolve_media_values(cfg, media_values)
-    cursor = 0
-    resolved_reference_images = resolved_media[cursor:cursor + len(reference_images)]
-    cursor += len(reference_images)
-    resolved_prompt_media = resolved_media[cursor:cursor + len(prompt_media)]
-    cursor += len(prompt_media)
-    resolved_image_references = resolved_media[cursor:cursor + len(image_references)]
-    cursor += len(image_references)
-    resolved_video_media = resolved_media[cursor:cursor + len(video_media)]
-
-    reference_mentions = create_reference_mentions(
-        args, cfg, tune_id, reference_specs, resolved_reference_images,
-    )
-    prompt_text = prepend_reference_mentions(args.text, reference_mentions)
-    form = []
-    if prompt_text is not None:
-        form.append(field("prompt[text]", prompt_text))
-    # Editing a single input image defaults to one result; text-to-image to two.
-    num_images = resolve_num_images(cfg, args.num_images, 1 if getattr(args, "input_image", None) else 2)
-    form.append(field("prompt[num_images]", num_images))
-    if getattr(args, "seed", None):
-        form.append(field("prompt[seed]", args.seed))
-    if getattr(args, "film_grain", None) is not None:
-        form.append(field("prompt[film_grain]",
-                          "true" if args.film_grain else "false"))
-    if args.aspect_ratio:
-        form.append(field("prompt[aspect_ratio]", args.aspect_ratio))
-    if getattr(args, "resolution", None):
-        form.append(field("prompt[resolution]", args.resolution))
-    for (prefix, value), resolved in zip(prompt_media, resolved_prompt_media):
-        form.append(media_field(prefix, value, resolved))
-    if getattr(args, "pack_id", None):
-        form.append(field("prompt[pack_id]", args.pack_id))
-    if getattr(args, "base_pack_id", None):
-        form.append(field("prompt[base_pack_id]", args.base_pack_id))
-    if video:
-        form.append(field("prompt[video_model]", args.video_model))
-        form.append(field("prompt[video_prompt]",
-                          prepend_reference_mentions(args.video_prompt, reference_mentions)))
-        form.extend(image_reference_fields(image_references, resolved_image_references))
-        if args.duration:
-            form.append(field("prompt[video_duration]", args.duration))
-        for (prefix, value), resolved in zip(video_media, resolved_video_media):
-            form.append(media_field(prefix, value, resolved))
-        if args.generate_audio is not None:
-            form.append(field("prompt[generate_audio]",
-                               "true" if args.generate_audio else "false"))
-
-    prompt = request(cfg, "POST", f"/tunes/{tune_id}/prompts", form=form, workspace=args.workspace)
-    prompt = prompt[0] if isinstance(prompt, list) else prompt
+    # Contract field order preserves the existing single-batch upload order.
+    media_inputs = []
+    resolved = {spec[1]: [] for spec in definition["fields"] if spec[2] == "media_array"}
+    for spec in definition["fields"]:
+        if spec[2] not in ("media", "media_array"):
+            continue
+        value = getattr(args, spec[1], None)
+        values = [value] if spec[2] == "media" else value or []
+        media_inputs.extend((spec[1], item) for item in values if item)
+    resolved_media = resolve_media_values(cfg, reference_images + [value for _, value in media_inputs])
+    for (argument, _value), uploaded in zip(media_inputs, resolved_media[len(reference_images):]):
+        if argument in resolved and isinstance(resolved[argument], list):
+            resolved[argument].append(uploaded)
+        else:
+            resolved[argument] = uploaded
+    reference_mentions = create_reference_mentions(args, cfg, tune_id, reference_specs, resolved_media[:len(reference_images)])
+    values = vars(args).copy()
+    values["model_id"] = tune_id
+    for text_argument in definition["references"]["texts"]:
+        values[text_argument] = prepend_reference_mentions(getattr(args, text_argument), reference_mentions)
+    counts = definition["image_count"]
+    values["num_images"] = resolve_num_images(cfg, args.num_images,
+        counts["edit"] if values.get(counts["input"]) else counts["generate"])
+    # Both generate_audio and video_audio remain in the shared definition,
+    # preserving the existing audio compatibility patch.
+    prompt = request(cfg, definition["method"], operation_path(definition, values),
+                     form=operation_fields(name, values, resolved), workspace=args.workspace)
+    prompt = operation_result(definition, prompt, values)
     if args.wait:
         prompt = poll_prompt(cfg, tune_id, prompt["id"], workspace=args.workspace)
     emit(prompt)
-
 
 def cmd_generate(args, cfg):
     if getattr(args, "video_prompt", None):
@@ -1428,19 +1574,10 @@ def cmd_inspect(args, cfg):
 # commands — packs / workspaces
 # --------------------------------------------------------------------------
 def cmd_packs_list(args, cfg):
-    query = []
-    if args.limit:
-        query.append(("limit", args.limit))
-    if args.offset:
-        query.append(("offset", args.offset))
-    packs = request(cfg, "GET", "/packs", query=query, workspace=args.workspace)
-    keys = ("id", "title", "slug", "subtitle", "main_class_name", "costs")
-    emit([{k: p.get(k) for k in keys} for p in packs])
-
+    emit(execute_api_operation("list_templates", args, cfg))
 
 def cmd_packs_get(args, cfg):
-    emit(request(cfg, "GET", f"/p/{args.slug}.json", workspace=args.workspace))
-
+    emit(execute_api_operation("get_template", args, cfg))
 
 def cmd_packs_create(args, cfg):
     payload = {"pack": {
@@ -1479,46 +1616,22 @@ def _id_list(value):
 
 
 def cmd_packs_run(args, cfg):
-    """Run a pack (template) — POST /p/:slug/tunes — firing its template prompts.
-
-    Two ways to say *who* the pack runs on:
-      * --tune-id ID (repeatable) reuses existing tunes. Multi packs require at
-        least one; the server dispatches tune_ids to its multi handler.
-      * a training set (--title/--name/--image/--image-url) trains a fresh tune
-        from photos, then generates (regular packs).
-    Overrides (--brief, and the prompt_attributes flags) ride along on either path."""
-    tune_ids = [tid for raw in (args.tune_id or []) for tid in _id_list(raw)]
-    training = any((args.title, args.name, args.image, args.image_url))
-    if not tune_ids and not training:
-        die("nothing to run — pass --tune-id (existing tunes) "
-            "or a training set (--title/--name/--image)")
-
-    form = [field("tune[tune_ids][]", tid) for tid in tune_ids]
-
-    if args.title:
-        form.append(field("tune[title]", args.title))
-    if args.name:
-        form.append(field("tune[name]", args.name))
-    for signed_id in direct_uploads(cfg, args.image or []):
-        form.append(field("tune[images][]", signed_id))
-    for url in (args.image_url or []):
-        form.append(field("tune[image_urls][]", url))
-
-    if args.brief:
-        form.append(field("tune[brief]", args.brief))
-    for pid in _id_list(args.prompt_ids):
-        form.append(field("tune[prompt_ids][]", pid))
-
-    for key, value in prompt_attribute_overrides(args).items():
-        form.append(field(f"tune[prompt_attributes][{key}]", value))
-
-    emit(request(cfg, "POST", f"/p/{args.slug}/tunes", form=form, workspace=args.workspace))
-
+    if not any((args.tune_id, args.title, args.name, args.image, args.image_url)):
+        die("nothing to run — pass --tune-id (existing tunes) or a training set (--title/--name/--image)")
+    values = vars(args).copy()
+    values["image"] = direct_uploads(cfg, args.image or [])
+    # Named overrides are defined once in the shared contract; --attr is the
+    # CLI-only escape hatch for additional prompt attributes.
+    extras = []
+    for raw in args.attr or []:
+        if "=" not in raw:
+            die(f"--attr must be KEY=VALUE (got {raw!r})")
+        key, value = raw.split("=", 1)
+        extras.append(field(f"tune[prompt_attributes][{key.strip()}]", value.strip()))
+    emit(execute_api_operation("run_template", argparse.Namespace(**values), cfg, extra_fields=extras))
 
 def cmd_workspaces_list(args, cfg):
-    workspaces = request(cfg, "GET", "/workspaces.json", no_workspace=True)
-    emit([{k: w.get(k) for k in ("id", "title", "slug")} for w in workspaces])
-
+    emit(execute_api_operation("list_workspaces", args, cfg))
 
 def cmd_workspaces_create(args, cfg):
     payload = {"workspace": {"title": args.title}}
@@ -2100,8 +2213,8 @@ def video_capability_help(rec, flag, base):
     return f"{base}; supported by {', '.join(models)}"
 
 
-def build_parser():
-    models_record = load_models_cache() or {}
+def build_parser(models_record=None):
+    models_record = (load_models_cache() or {}) if models_record is None else models_record
     parser = argparse.ArgumentParser(prog="astria", description="Astria API command-line client.")
     parser.add_argument("--profile", metavar="NAME",
                         help="config profile to use (also ASTRIA_PROFILE env); default: 'default'")
@@ -2480,6 +2593,167 @@ def build_parser():
     p.set_defaults(func=cmd_session_hook)
 
     return parser
+
+
+
+# The command tree above is the parameter source of truth for CLI and MCP.
+# Only transport policy lives here; no second set of API payload builders.
+OPERATION_POLICIES = {
+    "list_models": (("models",), True, {"refresh"}),
+    "list_workspaces": (("workspaces", "list"), True, set()),
+    "list_references": (("tunes", "list"), True, set()),
+    "get_reference": (("tunes", "get"), True, set()),
+    "create_reference": (("tunes", "create"), False, {"image"}),
+    "generate_images": (("generate",), False, {"wait", "video_prompt"}),
+    "generate_video": (("video",), False, {"wait", "input_image"}),
+    "list_prompts": (("prompts", "list"), True, {"user_id"}),
+    "get_prompt": (("prompts", "get"), True, set()),
+    "list_templates": (("packs", "list"), True, set()),
+    "get_template": (("packs", "get"), True, set()),
+    "run_template": (("packs", "run"), False, {"image", "attr"}),
+}
+REMOTE_MEDIA_ARGUMENTS = {
+    "image_url", "input_image", "mask_image", "references", "image_references",
+    "first_frame", "last_frame", "input_video", "audio_reference",
+}
+
+
+class OperationContext(dict):
+    """Request-scoped API transport. Never resolves CLI files or credentials."""
+    def __init__(self, transport):
+        super().__init__()
+        self.transport = transport
+
+
+def operation_parser(path):
+    parser = build_parser(models_record={})
+    for command in path:
+        subcommands = next(action for action in parser._actions
+                           if isinstance(action, argparse._SubParsersAction))
+        help_text = next((choice.help for choice in subcommands._choices_actions
+                          if choice.dest == command), "")
+        parser = subcommands.choices[command]
+        if not parser.description:
+            parser.description = help_text
+    return parser
+
+
+def operation_catalog():
+    tools = []
+    for name, (path, readonly, excluded) in OPERATION_POLICIES.items():
+        parser = operation_parser(path)
+        properties = {}
+        required = []
+        for action in parser._actions:
+            if action.dest in excluded or action.dest == "help":
+                continue
+            boolean = isinstance(action, (argparse._StoreTrueAction, argparse.BooleanOptionalAction))
+            spec = {"type": "boolean" if boolean else "string"}
+            if action.choices is not None:
+                spec["enum"] = list(action.choices)
+            if isinstance(action, argparse._AppendAction):
+                spec = {"type": "array", "items": spec}
+            if action.help and action.help != argparse.SUPPRESS:
+                spec["description"] = action.help.replace("%(default)s", str(action.default))
+            properties[action.dest] = spec
+            if action.required or not action.option_strings:
+                required.append(action.dest)
+        # These flags are validated by their handlers in terminal use.
+        if name == "generate_images":
+            required.append("text")
+        if name == "get_prompt":
+            required.append("tune")
+        if name == "create_reference":
+            required.append("image_url")
+        if not readonly:
+            properties["idempotency_key"] = {"type": "string", "minLength": 1,
+                "description": "Unique submission key. Reuse it only when retrying the same operation."}
+            required.append("idempotency_key")
+        tools.append({
+            "name": name,
+            "title": name.replace("_", " ").title(),
+            "description": (parser.description or "Astria " + " ".join(path)) +
+                (". Creates paid Astria content; submit only at the user's request. Returns promptly; use get_prompt to check generations." if not readonly else ""),
+            "inputSchema": {"type": "object", "properties": properties,
+                            "required": list(dict.fromkeys(required)), "additionalProperties": False},
+            "outputSchema": {"type": "object", "properties": {"result": {}},
+                             "required": ["result"], "additionalProperties": False},
+            "annotations": {"readOnlyHint": readonly, "destructiveHint": False,
+                            "openWorldHint": not readonly},
+            "securitySchemes": [{"type": "oauth2", "scopes": []}],
+        })
+    return tools
+
+
+def operation_contract():
+    operations = {}
+    for tool in operation_catalog():
+        name = tool["name"]
+        definition = API_OPERATIONS[name]
+        path, _readonly, _excluded = OPERATION_POLICIES[name]
+        parser = operation_parser(path)
+        actions = [action for action in parser._actions if action.dest != "help"]
+        covered = {spec[1] for spec in definition["fields"]} | {"workspace", "idempotency_key"}
+        covered.update(re.findall(r"\{([^}]+)\}", definition["path"]))
+        if "path_choice" in definition:
+            covered.add(definition["path_choice"][0])
+            covered.update(re.findall(r"\{([^}]+)\}", definition["path_choice"][1]))
+        if "model" in definition:
+            covered.add(definition["model"]["argument"])
+            if "fallback_argument" in definition["model"]:
+                covered.add(definition["model"]["fallback_argument"])
+        if "references" in definition:
+            covered.add(definition["references"]["argument"])
+        unmapped = set(tool["inputSchema"]["properties"]) - covered
+        if unmapped:
+            raise AstriaError(f"{name} has unmapped parameters: {sorted(unmapped)}")
+        operations[name] = {**definition,
+            "defaults": {**{spec[1]: None for spec in definition["fields"]},
+                         **{action.dest: action.default for action in actions}},
+            "integer_arguments": [action.dest for action in actions if action.type is int]}
+    return {"version": 1, "operations": operations,
+            "remote_media_arguments": sorted(REMOTE_MEDIA_ARGUMENTS),
+            "fallback_models": MODEL_TUNES, "fallback_default": "gemini"}
+
+
+def run_operation(name, arguments, transport):
+    """Execute a shared handler without terminal output, local state or tokens."""
+    path, _readonly, excluded = OPERATION_POLICIES[name]
+    tool = next(tool for tool in operation_catalog() if tool["name"] == name)
+    schema = tool["inputSchema"]
+    unknown = set(arguments) - set(schema["properties"])
+    missing = set(schema["required"]) - set(arguments)
+    if unknown or missing:
+        raise AstriaError(f"Invalid arguments: unknown={sorted(unknown)}, missing={sorted(missing)}")
+    parser = operation_parser(path)
+    values = {action.dest: action.default for action in parser._actions if action.dest != "help"}
+    for key, value in arguments.items():
+        spec = schema["properties"][key]
+        valid = {"string": isinstance(value, str), "boolean": isinstance(value, bool),
+                 "array": isinstance(value, list) and all(isinstance(item, str) for item in value)}[spec["type"]]
+        if not valid or (spec.get("enum") is not None and value not in spec["enum"]):
+            raise AstriaError(f"Invalid value for {key}")
+        if key in REMOTE_MEDIA_ARGUMENTS:
+            media = value if isinstance(value, list) else [value]
+            for item in media:
+                url = item.split("=", 1)[1] if key == "references" and "=" in item else item
+                parsed = urlparse(url)
+                if parsed.scheme != "https" or not parsed.hostname or parsed.username:
+                    raise AstriaError(f"{key} requires HTTPS URLs; local files belong to the CLI")
+        if key != "idempotency_key":
+            values[key] = value
+    for action in parser._actions:
+        if action.dest in values and action.type is not None and values[action.dest] is not None:
+            values[action.dest] = action.type(values[action.dest])
+    output = []
+    marker = _operation_output.set(output)
+    try:
+        parser.get_default("func")(argparse.Namespace(**values), OperationContext(transport))
+    finally:
+        _operation_output.reset(marker)
+    if len(output) != 1:
+        raise AstriaError("Operation must return exactly one structured result")
+    return output[0]
 
 
 def main():

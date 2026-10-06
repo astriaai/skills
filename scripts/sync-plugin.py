@@ -72,6 +72,13 @@ def main():
             shutil.rmtree(staging)
 
     copy_file(ROOT / "bin" / "astria", PLUGIN_ROOT / "bin" / "astria", executable=True)
+    copy_file(ROOT / "mcp.json", PLUGIN_ROOT / "mcp.json")
+    portable_mcp = read_json(ROOT / "mcp.json")
+    compatibility_mcp = {"mcpServers": {
+        name: {**server, "type": "http"}
+        for name, server in portable_mcp["mcpServers"].items()
+    }}
+    (PLUGIN_ROOT / ".mcp.json").write_text(json.dumps(compatibility_mcp, indent=2) + "\n", encoding="utf-8")
     # OpenAI directory submissions cannot contain hooks. Claude loads the
     # canonical hooks from the repository root instead.
     if (PLUGIN_ROOT / "hooks").exists():

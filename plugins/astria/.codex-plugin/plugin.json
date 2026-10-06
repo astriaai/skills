@@ -39,5 +39,6 @@
       "Generate consistent headshots from my photos.",
       "Turn these images into a cinematic video storyboard."
     ]
-  }
+  },
+  "mcpServers": "./.mcp.json"
 }

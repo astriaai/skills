@@ -34,3 +34,10 @@ echo "Vendored astria CLI ($ORIGIN) -> $DEST"
 # The OpenAI plugin vendors the same CLI, and local developer skills must stay
 # linked after every CLI release.
 "$(dirname "$0")/sync-plugin.sh"
+
+# The Rails MCP server consumes the shared JSON request contract and schemas.
+# A normal CLI release updates this local snapshot before the next Rails deploy.
+MCP_REPO="${ASTRIA_MCP_REPO:-$(dirname "$(cd "$(dirname "$0")/.." && pwd)")/sdbooth}"
+if [ -x "$MCP_REPO/bin/sync-astria-mcp" ]; then
+  "$MCP_REPO/bin/sync-astria-mcp" --from "$DEST"
+fi

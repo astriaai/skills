@@ -90,6 +90,12 @@ def main():
         require(file_map(source) == file_map(generated[name]), f"generated skill differs from source: {name}")
 
     require((ROOT / "bin" / "astria").read_bytes() == (PLUGIN_ROOT / "bin" / "astria").read_bytes(), "generated CLI is stale")
+    require((ROOT / "mcp.json").read_bytes() == (PLUGIN_ROOT / "mcp.json").read_bytes(), "generated MCP config is stale")
+    mcp = read_json(PLUGIN_ROOT / "mcp.json")
+    require(mcp["$schema"] == "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json", "invalid MCP schema")
+    require(mcp["mcpServers"] == {"astria": {"type": "streamable-http", "url": "https://api.astria.ai/mcp"}}, "incorrect Astria MCP endpoint")
+    require(codex["mcpServers"] == "./.mcp.json", "Codex MCP wiring is missing")
+    require(read_json(PLUGIN_ROOT / ".mcp.json") == {"mcpServers": {"astria": {"type": "http", "url": "https://api.astria.ai/mcp"}}}, "incorrect compatibility MCP config")
     require(not (PLUGIN_ROOT / "hooks").exists(), "OpenAI directory packages cannot contain hooks")
     require(not list(PLUGIN_ROOT.rglob("*.pyc")), "generated plugin contains .pyc files")
     require(not list(PLUGIN_ROOT.rglob("__pycache__")), "generated plugin contains __pycache__")
