@@ -11,6 +11,12 @@ on:
 permissions:
   contents: read
 
+# GitHub occasionally delivers one push twice (v1.5.6 got two tag runs on the
+# same SHA). Serialize runs per ref so the duplicate cannot race the release.
+concurrency:
+  group: plugin-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   validate-and-package:
     runs-on: ubuntu-latest
@@ -56,4 +62,10 @@ jobs:
       - name: Publish tagged GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.sha256 --generate-notes --verify-tag --repo "$GITHUB_REPOSITORY"
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; replacing its assets."
+            gh release upload "$GITHUB_REF_NAME" dist/*.zip dist/*.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.sha256 --generate-notes --verify-tag --repo "$GITHUB_REPOSITORY"
+          fi
