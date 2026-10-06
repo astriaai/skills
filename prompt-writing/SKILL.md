@@ -1,7 +1,6 @@
 ---
 name: prompt-writing
 description: Use when writing, improving, or debugging image generation prompts or choosing prompt parameters.
-allowed-tools: Bash(astria:*)
 ---
 
 # Prompt Writing
@@ -10,36 +9,37 @@ Always write generation prompt text in English, even when the user communicates
 in another language. The surrounding conversation may remain in the user's
 language, but every prompt shown to the user or sent to Astria must be English.
 
-Before writing a prompt, get to know the user with the `astria` CLI (see the
-`astria-api` skill):
+Before writing a prompt, use the connected MCP tools (see **astria-api**):
 
-- `astria prompts list --limit 20` — their recent prompts, to learn their style and parameters.
-- `astria packs list` — their packs. If the request is about a specific subject (e.g. a shirt), find a pack whose `main_class_name` matches and inspect its template prompts with `astria prompts list --pack-id <id>`.
-- `astria tunes list` — their references/tunes. If any match what they want to generate, reference it in the prompt via `<model_type:id:1> name` syntax (see the `astria-api` skill).
+- `list_prompts` with `limit: "20"` — their recent prompts, to learn their style and parameters.
+- `list_templates` — their packs. If the request is about a specific subject (e.g. a shirt), find a pack whose `main_class_name` matches and inspect its template prompts using `list_prompts` and `pack_id`.
+- `list_references` — their references/tunes. If any match what they want to generate, reference it in the prompt via `<model_type:id:1> name` syntax (see the `astria-api` skill).
 
 Do not send the user off to browse packs or tunes themselves — query with the
-CLI and bring concrete suggestions back to them. When offering choices, your
+tools and bring concrete suggestions back to them. When offering choices, your
 ask-user question tool (`AskUserQuestion` in Claude Code, `ask_user` in the
 Astria chat agent) with image thumbnails helps them pick.
 
 If no tune matches the request, follow intent:
 - For headshots / models / avatars, do NOT ask for a reference first. Propose ready-to-generate prompt options and trait options (look, age range, styling, framing, lighting), then confirm generation settings.
-- For product or person-specific identity requests where likeness matters, ask the user to provide a reference image (upload it as a tune with `astria tunes create`, or drag it into the prompt box in the web app).
+- For product or person-specific identity requests where likeness matters, ask the user to provide a reference image (upload it as a tune using `create_reference` and an accessible HTTPS image URL, or drag it into the prompt box in the web app).
 - Do not suggest web search for this flow.
 
-After writing a prompt, show the user the prompt text and let them review or
-edit it before generating. Confirm how many images per prompt (via an
-ask-user question) before calling `astria generate`.
+For a prompt-writing request, show the prompt for review before generating.
+For an explicit generation request, use the requested image count and settings;
+clarify only settings that materially affect the result and are missing. Submit
+through `generate_images` with a fresh idempotency key (see **astria-api**).
 
 # Types of request
 
 1. **E-commerce / product shots** — reference tunes to create a new image.
-2. **Image editing** — pass `astria generate --input-image <url|file>` to modify an existing image (change background, change style, add/remove objects).
-3. **Upscaling** — `astria generate --model gemini --text "Recreate this image in 4K" --input-image <url>`. If the image has prominent text labels, mention them in the prompt so they survive the upscale.
+2. **Image editing** — pass `generate_images` with `input_image: "<HTTPS URL>"` to modify an existing image (change background, change style, add/remove objects).
+3. **Upscaling** — `generate_images` with `text: "Recreate this image in 4K"` and an `input_image` HTTPS URL; select a model supporting 4K from `list_models`. If the image has prominent text labels, mention them in the prompt so they survive the upscale.
 
 # Prompt Writing Guide
 
-By default generate with the **gemini** model (`astria generate --model gemini`).
+Use the default image model returned by **`list_models`**, unless the user
+selected another model or the specialized skill requires one.
 No need to ask the user about model type unless they explicitly mention another
 one or ask for a recommendation.
 
@@ -75,18 +75,18 @@ strength. Always write `:1`; never vary it, and never tell a user to change it.
 ## Reviewing bad results
 
 If the user says results are bad, figure out what went wrong:
-1. Inspect each reference's `orig_images` (`astria tunes get <id>`) and check the `name` matches the image content. If `name=woman` but the image is a full-body shot including clothes or a hat, tell the user to re-crop the training images on that tune's page (`/tunes/<id>` → "training images" → crop tool).
-2. The `name` must represent the main subject. "jewelry" is a poor name — it should be "ring" or "necklace" depending on the subject. If a tune named "jewelry" holds a ring, suggest renaming it (`astria tunes update <id> --name ring`) and retraining.
+1. Inspect each reference's `orig_images` (`get_reference` with `id`) and check the `name` matches the image content. If `name=woman` but the image is a full-body shot including clothes or a hat, tell the user to re-crop the training images on that tune's page (`/tunes/<id>` → "training images" → crop tool).
+2. The `name` must represent the main subject. "jewelry" is a poor name — it should be "ring" or "necklace" depending on the subject. If a tune named "jewelry" holds a ring, suggest renaming it to `ring` and retraining on the tune's page. Reference updates are currently CLI/UI-only.
 3. Distorted or competing faces (e.g. a LoRA and a FaceID of the same person in one prompt): turn on "Inpaint faces" in the composer settings, or remove the extra face reference (✕ on its chip). Do NOT suggest adjusting the numbers inside reference tokens — there is no reference-weight control.
 
 ## Key parameters
 
-| Parameter | CLI flag | Common values |
+| Parameter | MCP argument | Common values |
 |-----------|----------|---------------|
-| Prompt text | `--text` | Required |
-| Number of images | `--num-images` | 1–4 |
-| Aspect ratio | `--aspect-ratio` | `1:1 16:9 9:16 21:9 9:21 3:2 2:3 5:4 4:5 4:3` |
-| Resolution (gemini only) | `--resolution` | `1K`, `2K` (default), `4K` |
+| Prompt text | `text` | Required |
+| Number of images | `num_images` | 1–4 |
+| Aspect ratio | `aspect_ratio` | `1:1 16:9 9:16 21:9 9:21 3:2 2:3 5:4 4:5 4:3` |
+| Resolution | `resolution` | Use the selected model's values from `list_models` |
 
 ## Tips for better results
 
@@ -101,7 +101,7 @@ background reference is attached. Wording cannot fix this; the reliable fix is
 the post-processing flag, appended to the prompt text:
 
 ```
-astria generate --text "<faceid:123:1> woman in a studio --background_color #f2f0ed"
+<faceid:123:1> woman in a studio --background_color #f2f0ed
 ```
 
 `--background_color #RRGGBB` recolors the detected background to that exact hex
@@ -121,5 +121,5 @@ Two related mistakes to check when a user reports a drifting background:
 
 # Fashion and garments
 
-1. Always work with a consistent face reference. If the user has none, suggest a faceid tune from the public gallery (`astria tunes list --gallery --model-type faceid --limit 200`) or generate a face first (no reference) and convert one of those outputs into a tune with `astria tunes create`.
+1. Always work with a consistent face reference. If the user has none, suggest a faceid tune from the public gallery (`list_references` with `gallery: true`, `model_type: "faceid"`, `limit: "200"`) or generate a face first (no reference) and convert one of those outputs into a tune using `create_reference` and an accessible HTTPS image URL.
 2. Figure out the intent — a lookbook (e.g. prompt `look book plain white background #fff`) or a campaign shot. Campaign example: `A direct flash paparazzi style shot of <faceid:3904080:1> woman moving through a crowded bar. She looks straight into the lens with an intense expression. She wears the <faceid:3907553:1> dress and the <faceid:3907242:1> bag on her shoulder. The background is dark and out of focus. High contrast, sharp flash.`

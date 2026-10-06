@@ -5,15 +5,15 @@
     "url": "https://www.astria.ai"
   },
   "metadata": {
-    "description": "Skills and a CLI for Astria generation, prompt writing, packs, and agent handoff.",
-    "version": "1.5.6"
+    "description": "Skills and OAuth-connected MCP tools for Astria generation, prompt writing and photoshoot templates.",
+    "version": "1.5.7"
   },
   "plugins": [
     {
       "name": "astria",
       "source": "./",
-      "description": "Generate and inspect images and video, manage references and packs, and hand agent sessions into Astria. Bundles the `astria` CLI — run `astria login` once.",
-      "version": "1.5.6",
+      "description": "Generate images and video, manage references and photoshoot templates through OAuth-connected Astria MCP. Includes optional CLI tools for local media and advanced workflows.",
+      "version": "1.5.7",
       "category": "creative",
       "author": {
         "name": "Astria",

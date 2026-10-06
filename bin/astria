@@ -144,6 +144,7 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                 ['prompt[num_images]', 'num_images', 'value'],
                                 ['prompt[seed]', 'seed', 'truthy'],
                                 ['prompt[film_grain]', 'film_grain', 'boolean'],
+                                ['prompt[inpaint_faces]', 'inpaint_faces', 'boolean'],
                                 ['prompt[aspect_ratio]', 'aspect_ratio', 'truthy'],
                                 ['prompt[resolution]', 'resolution', 'truthy'],
                                 ['prompt[input_image]', 'input_image', 'media'],
@@ -2346,6 +2347,8 @@ def build_parser(models_record=None):
     p.add_argument("--aspect-ratio", default="3:4", help="e.g. 3:4, 1:1, 16:9 (default: %(default)s)")
     p.add_argument("--resolution", help=resolution_help(models_record))
     p.add_argument("--input-image", help="URL or local file to edit")
+    p.add_argument("--inpaint-faces", action=argparse.BooleanOptionalAction, default=None,
+                   help="enable or disable face inpainting; omit to use the model default")
     p.add_argument("--mask-image", help="URL or local file to use as an inpainting mask")
     p.add_argument("--reference", "--images", dest="references", action="append", metavar="NAME=PATH_OR_URL",
                    help="create and attach a reference; repeat for each NAME=PATH_OR_URL (--images is an alias)")

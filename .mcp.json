@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "astria": {
+      "type": "http",
+      "url": "https://api.astria.ai/mcp"
+    }
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "astria",
-  "version": "1.5.6",
-  "description": "Create and manage Astria image and video generations, references, prompts, and reusable photoshoot packs.",
+  "version": "1.5.7",
+  "description": "Generate images and video, manage references and photoshoot templates through OAuth-connected Astria MCP. Includes optional CLI tools for local media and advanced workflows.",
   "author": {
     "name": "Astria",
     "email": "support@astria.ai",

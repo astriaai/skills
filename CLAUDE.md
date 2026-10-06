@@ -1,67 +1,54 @@
-# Astria Claude Skills — repository guide
+# Astria skills — repository guide
 
-This repo is a **Claude Code plugin marketplace**. It is consumed two ways:
+The canonical public skills live in top-level `<name>/SKILL.md` directories.
+The root is a Claude marketplace plugin; `plugins/astria` is the generated
+portable OpenAI/Codex package. The Astria web-agent sandbox also bundles these
+skills with its independently authenticated CLI and private embedded skills.
 
-1. **Install** — `npx skills add astriaai/skills` (cross-agent), or
-   `/plugin marketplace add astriaai/skills` in Claude Code. The repo root *is*
-   the plugin. See `README.md`.
-2. **Astria web chat agent** — the `worker/chat-helper` worker bundles these
-   skills and the `astria` CLI into its sandbox, alongside its own private
-   embedded skills (`worker/chat-helper/embedded-skills/`) and system prompt.
+## API transport
 
-## Layout
+Installed plugins use OAuth-connected Astria MCP tools for supported API
+operations. The host owns login, token storage and refresh. Use live tool
+schemas; names may have a host namespace. Never read host credentials or
+silently fall back to the CLI after an MCP authentication failure.
 
-The repo root is the plugin — skill directories sit at the top level so
-`npx skills` discovers them
+The CLI remains available for local files, downloads, video inspection/Variate,
+workspace/template creation, landing pages, board edits and agent handoff.
+It has separate authentication. The embedded Astria web-agent sandbox may
+expose only the authenticated CLI; preserve that supported environment.
+Conditional instructions live in `astria-api/references/cli.md`, not in the
+default MCP entrypoint. Never build a second API client in skills.
 
-```
-.claude-plugin/
-  marketplace.json                  marketplace catalog + skill list
-  plugin.json                       plugin manifest
-<name>/SKILL.md                     public skills (one dir per skill, at root)
-bin/astria                          the astria CLI — VENDORED, see below
-hooks/hooks.json                    SessionStart auth check
-scripts/sync-cli.sh                 re-vendor the CLI from astriaai/cli
-README.md                           install + usage
-```
+`bin/astria` is vendored from [astriaai/cli](https://github.com/astriaai/cli).
+Change the canonical CLI there, then run `scripts/sync-cli.sh [ref]`. Shared
+operation definitions and argparse generate MCP schemas; add new remote-safe
+parameters there and synchronize Rails through `bin/sync-astria-mcp`.
 
-Adding or renaming a skill: create/rename its top-level `<name>/SKILL.md`
-directory and add `"./<name>"` to the `skills` array in
-`.claude-plugin/marketplace.json` (plain `./`-prefixed path strings — the
-marketplace schema rejects bare names and `{name, path}` objects).
+## Packaging
 
-## The `astria` CLI
+- `.claude-plugin/marketplace.json` owns the canonical skill list. Add each
+  skill as a `"./<name>"` path.
+- `mcp.json` owns the portable HTTPS endpoint. `scripts/sync-plugin.py`
+  generates root and packaged `.mcp.json` HTTP compatibility configs.
+- `scripts/sync-plugin.sh --no-local-links` copies canonical skills (including
+  references), manifests, MCP configuration and the vendored CLI to
+  `plugins/astria`. Without that flag it also refreshes developer symlinks.
+- No SessionStart CLI-auth hook: OAuth is managed by the host.
+- Keep skill frontmatter descriptions focused; retain shell permissions only
+  for skills that actually need optional terminal workflows.
+- Public skills must not depend on private web-chat browser command protocols.
+  Composer tools apply only when the host exposes them.
 
-`bin/astria` is the single entry point for the Astria API. It
-resolves credentials from environment variables first, then
-`~/.astria/config.json` (written by `astria login`). Every skill calls
-`astria …` — never raw `curl`, never API tokens in skill text.
-
-This is deliberate: it keeps the permission surface to one rule
-(`Bash(astria:*)`), and marketplace users run `astria login` once instead of
-exporting a fistful of environment variables.
-
-**Source of truth: the [`astriaai/cli`](https://github.com/astriaai/cli) repo.**
-`bin/astria` is a *vendored copy* so marketplace installs and the
-web agent need no bootstrap. Edit the CLI in `astriaai/cli`, then re-vendor here
-with `scripts/sync-cli.sh [ref]`. Standalone users install it directly via
-`curl -fsSL https://raw.githubusercontent.com/astriaai/cli/main/install.sh | sh`.
-
-## Conventions for skills
-
-- Each `SKILL.md` has `name`, `description`, and — if it runs commands —
-  `allowed-tools` frontmatter (e.g. `Bash(astria:*)`), which pre-authorizes
-  those tools so the skill runs without permission prompts.
-- Public skills must NOT reference environment variables, raw `curl`, or the
-  `[ASTRIA_*]` web-chat browser protocol. Those belong to the embedded layer
-  in `worker/chat-helper/` (private), which the web agent loads on top.
-- Document any new API surface as `astria` CLI verbs in the `astria-api` skill;
-  add the verb to `bin/astria`.
-
-## Testing
+## Validation
 
 ```bash
-bin/astria --help
-python3 -m py_compile bin/astria
-bin/astria login --api-key <key> && bin/astria whoami
+scripts/sync-plugin.sh --no-local-links
+python3 scripts/validate-plugin.py
+python3 scripts/build-plugin.py /tmp/astria-plugin-preview
 ```
+
+The validator checks source/package parity, MCP wiring and skill JSON tool
+examples against the vendored CLI's generated schemas. Also run relevant
+Rails MCP specs if changing shared operation behavior. Deploying the endpoint,
+registering OAuth clients and publishing a directory version are separate
+release steps; see `docs/PUBLISHING.md`.

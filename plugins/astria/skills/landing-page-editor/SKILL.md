@@ -16,8 +16,12 @@ layout edits, adding a section, changing copy, swapping an image, fixing a
 tagline), edit the HTML directly and write it back. Do NOT send a `brief`
 unless the user wants a full regeneration.
 
-All commands use the `astria` CLI (see the `astria-api` skill). Pass
-`-w <workspace_id>` to target the workspace.
+Landing-page HTML read/write is currently CLI-only. Read the optional
+[CLI reference](../astria-api/references/cli.md) and use independently authenticated
+CLI access for these commands. If only MCP/OAuth is available, use the Astria
+workspace UI; do not imply there is a landing-page MCP tool or that host OAuth
+authenticates the CLI. Pass `-w <workspace_id>` for CLI workspace scope.
+Use MCP for the supported data reads below.
 
 ## Constraints carried over from `LANDING_PAGE_PROMPT`
 
@@ -46,15 +50,10 @@ when you need those. Preview the rendered page at `/w/{slug}`.
 
 ### 2. Pull workspace data (when an edit needs to reference real packs / prompts / tunes)
 
-```bash
-astria packs list -w <workspace_id> --limit 100
-astria tunes list -w <workspace_id> --limit 200            # the "cast" rendered on the page
-astria prompts list -w <workspace_id> --limit 100 --offset 0   # page with --offset until empty
-astria prompts list -w <workspace_id> --pack-id <pack_id>      # cheaper, one section at a time
-```
-
-List endpoints paginate via `--limit`/`--offset` (default sort id desc). Loop
-with `--offset` until a page comes back empty.
+Use `list_templates`, `list_references` (the page's cast), and `list_prompts`
+with `workspace: "<workspace_id>"`. Pass string `limit`/`offset` for pagination;
+`list_prompts` with `pack_id` retrieves one template section at a time. Default
+sort is newest ID first; advance the offset until a page comes back empty.
 
 ### 3. Make the incremental edit
 

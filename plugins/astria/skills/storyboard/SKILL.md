@@ -65,7 +65,12 @@ header or describe storyboard tiles.
 
 ## Apply it to the composer
 
-Choose the video model before calling `present_generation`:
+When running inside Astria and the host exposes `present_generation`, use the
+composer workflow below. In other hosts, present the English storyboard text
+for review; do not invent a composer tool or submit a generation for a planning
+request. Use **astria-api** for the connected MCP transport.
+
+Choose the video model from `list_models` before preparing the draft:
 
 - Preserve an explicit video model already selected in the current draft.
 - Otherwise, reuse the Seedance 2.5 or Seedance 2 model and resolution established
@@ -81,8 +86,7 @@ from Current generation draft JSON, including the ordered
 explicitly requested another supported duration. Set `video_model` to the
 explicit, established, or user-selected model from the rules above. This writes
 the sequence directly to video mode with no image/first-frame prompt. Do not
-repeat the storyboard in assistant text and do not emit an `ASTRIA_PROMPT` or
-`ASTRIA_VIDEO_PROMPT` command.
+repeat the storyboard in assistant text.
 
 If the current image prompt already contains the completed storyboard or the
 user asks to move the current prompt into video mode, remove any `pose` tune
@@ -95,7 +99,7 @@ it beyond translation.
 ## Generate video
 
 When the user explicitly asks to generate, pass the exact approved, pose-tune-
-free storyboard as `--video-prompt`, omit `--text` entirely, and default to a
+free storyboard as `video_prompt`, omit `text` entirely, and default to a
 15-second duration unless the user explicitly requested another supported
 duration:
 
@@ -109,21 +113,13 @@ duration:
   use English content as-is; translate non-English content faithfully into
   English before generation.
 
-```bash
-astria video --video-model "<the chosen Seedance 2.5 or Seedance 2 model>" \
-  --duration 15 --num-images 1 \
-  --image-reference "<reference 1>" --image-reference "<reference 2>" \
-  --video-prompt "<the exact approved storyboard>"
-```
+Call `generate_video` with the chosen catalog `video_model`, the exact
+`video_prompt`, `duration: "15"`, `num_images: "1"`, the current aspect ratio
+when available, and a fresh `idempotency_key`. Include `image_references` as
+an array of HTTPS URLs in the original order; omit it if no raw references
+exist. For local paths, obtain real uploaded URLs or use the optional CLI
+workflow in **astria-api**. Do not rewrite local paths into invented URLs.
 
-Include one `--image-reference` for every raw reference, in its original order.
-Omit those options when the draft has no raw image references. Use either all
-local paths or all URLs in a single command.
-
-Replace `15` only when the user explicitly requested another supported
-duration.
-
-Use the current aspect ratio when it is available. Raw `--image-reference`
-waypoints are not first-frame prompts. Do not create or pass an artboard image,
-an input image, or an image/first-frame prompt unless the user explicitly asks
-for one.
+Replace `"15"` only when the user requested another supported duration. Raw
+image waypoints are not first-frame prompts. Do not create or pass an artboard
+image or an image/first-frame prompt unless the user asks for one.

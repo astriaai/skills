@@ -1,157 +1,127 @@
-# Astria AI Skills
+# Astria AI plugin
 
-Skills and a CLI for the [Astria](https://www.astria.ai) API — AI image & video
-generation, fine-tuning (tunes / references), prompt writing, and automated
-photoshoot packs — packaged as native OpenAI/Codex and Claude plugins.
+[Astria](https://www.astria.ai) skills and OAuth-connected MCP tools for image
+and video generation, references, prompt writing and photoshoot templates.
+The plugin connects to `https://api.astria.ai/mcp`. Your agent host handles
+Astria login and keeps the connection authenticated.
 
 ## Install in Codex
-
-Add this repository marketplace, then install Astria:
 
 ```bash
 codex plugin marketplace add astriaai/skills --ref main
 codex plugin add astria@astria
 ```
 
-To fetch a newer repository snapshot:
+Connect Astria through the host's plugin/MCP connection settings and complete
+its OAuth login. Start a new task after installation or upgrade so refreshed
+skills and tools load. For a newer repository snapshot:
 
 ```bash
 codex plugin marketplace upgrade astria
 codex plugin add astria@astria
 ```
 
-Start a new task after installing or upgrading so the refreshed skills load.
-
 ChatGPT workspace administrators can import `astriaai/skills` as a GitHub
-marketplace. Imported marketplaces sync daily and can be refreshed immediately
-with **Sync now**. Public web, desktop, and mobile availability begins after
-OpenAI reviews and publishes the plugin in the universal directory.
+marketplace. Imported marketplaces can be refreshed with **Sync now**. Public
+directory availability requires a reviewed, published OpenAI plugin version
+and its registered Astria connection.
 
-## Install in other agents
+## Install in Claude Code
 
-The quickest way — cross-agent, works in Claude Code, Cursor, and other
-agents:
+```text
+/plugin marketplace add astriaai/skills
+/plugin install astria@astria
+```
+
+Use `/mcp` to connect/authenticate Astria. The root `.mcp.json` is generated
+from the same endpoint as the OpenAI/Codex package, following the
+[Claude plugin configuration](https://code.claude.com/docs/en/plugins-reference#mcpservers).
+The host automatically registers its public OAuth client through DCR after
+the server update is deployed; see the rollout requirements below.
+
+## Install skills in other agents
 
 ```bash
 npx skills add astriaai/skills
 ```
 
-Inside Claude Code, install via the plugin marketplace:
+This installs skill instructions; it does not configure an MCP connection.
+Add `https://api.astria.ai/mcp` in the agent's MCP settings and complete its
+OAuth login. Hosts supporting DCR register their client automatically. The skills use discovered
+tool names and schemas rather than assuming one agent's namespace.
 
-```
-/plugin marketplace add astriaai/skills
-/plugin install astria@astria
-```
+## MCP workflows
 
-Then authenticate once:
+- Discover current models, workspaces, references and photoshoot templates.
+- Create references from HTTPS image URLs; generate images, edits and videos.
+- Run existing templates on references or a new training set.
+- Inspect prompt results and image review comments. Hosts supporting MCP
+  events can receive completion notifications; other hosts check prompt status.
 
-```
-astria login
-```
+Generation submits promptly and renders asynchronously. Instructions preserve
+submission keys across retries to avoid duplicate paid actions. No Python,
+curl or local API-key file is required for these MCP workflows.
 
-`astria login` prompts for an API key — get one at
-[astria.ai/users/edit/api](https://www.astria.ai/users/edit/api). It is stored
-in `~/.astria/config.json`. **No environment variables to export.**
+## Optional CLI workflows
 
-The skills then load automatically when relevant, and every Astria operation
-runs through the bundled `astria` CLI — so you only ever approve
-`Bash(astria:*)`, never raw network access.
-
-**Not using Claude Code?** The `astria` CLI installs standalone from
-[`astriaai/cli`](https://github.com/astriaai/cli):
-
-```
-curl -fsSL https://raw.githubusercontent.com/astriaai/cli/main/install.sh | sh
-```
-
-The plugin bundles a vendored copy of that same CLI, so a marketplace install
-needs nothing extra.
-
-## Developing and releasing
-
-Run `scripts/sync-plugin.sh` after adding or renaming a skill. It rebuilds the
-self-contained OpenAI plugin in `plugins/astria` and refreshes all
-`~/.claude/skills` and `~/.codex/skills` symlinks. CLI synchronization invokes
-it automatically.
-
-Preview or publish a release with the guarded release driver:
+The plugin still bundles the [Astria CLI](https://github.com/astriaai/cli) for
+local file uploads/downloads, batch orchestration, video inspection/Variate,
+workspace/template creation, landing-page HTML and agent handoff. These
+capabilities need a terminal, Python 3.9+, curl and independent CLI login:
 
 ```bash
-scripts/release-driver.py X.Y.Z --dry-run
-scripts/release-driver.py X.Y.Z --publish
+astria login
+astria whoami
+astria variate ./source.mp4 --reference ./dress.jpg \
+  --brief "Keep the performance and replace the wardrobe" --wait
 ```
 
-The publish mode requires a clean, up-to-date `main`, prepares and validates
-the plugin, creates an explicit release commit and annotated tag, pushes both
-atomically, waits for GitHub Actions, verifies the published checksum, and
-refreshes the local Codex installation. OpenAI directory review and publication
-remain portal actions because OpenAI does not expose them through a supported
-CLI or API.
-
-See [`docs/PUBLISHING.md`](docs/PUBLISHING.md) for the complete publishing and
-upgrade flow.
-
-## Requirements
-
-- **Python 3.8+** and **curl** — both standard on macOS and Linux. The `astria`
-  CLI uses only the Python standard library; nothing to `pip install`.
+CLI login uses an API key from
+[Astria account settings](https://www.astria.ai/users/edit/api); it is separate
+from the host's OAuth connection. The plugin no longer checks CLI login at
+session startup. For details see
+[`astria-api/references/cli.md`](astria-api/references/cli.md). The CLI-only
+Astria web-agent sandbox remains supported.
 
 ## Skills
 
-| Skill | What it does |
-|-------|--------------|
-| **astria-api** | The `astria` CLI reference — tunes, prompts, packs, generate, video, variate |
-| **prompt-writing** | Prompt syntax, parameters, and writing effective prompts |
-| **packs-guide** | Pack templates, categories, and photoshoot workflows |
-| **unique-headshot** | Generate diverse, realistic headshots with no reference |
+| Skill | Purpose |
+|-------|---------|
+| **astria-api** | MCP usage, results, references, generation, templates and pricing; optional CLI reference |
+| **prompt-writing** | Prompt syntax, parameters and writing effective prompts |
+| **packs-guide** | Templates, categories and photoshoot workflows |
+| **unique-headshot** | Diverse, realistic headshots with explicit model/face-inpainting settings |
 | **navigation** | Astria app sitemap |
-| **landing-page-editor** | Edit a workspace's magazine-style landing page |
-| **storyboard** | Build a text-only cinematic video sequence from a draft or ordered image references |
+| **store-photoshoot** | Store catalog to reusable photoshoot workflow; some steps need CLI/UI |
+| **landing-page-editor** | Edit a workspace's landing HTML through optional CLI access |
+| **storyboard** | Text-only cinematic video sequence from a draft or ordered images |
 | **artboard** | Legacy alias for Storyboard |
 
-## The `astria` CLI
-
-`astria` wraps the Astria API. A taste:
+## Development and rollout
 
 ```bash
-astria login                          # store an API key
-astria whoami                         # show the account
-astria models                         # current model -> tune-id mapping
-astria tunes list --title "dress"     # find references
-astria generate --text "<faceid:123:1> woman, white studio" --num-images 4
-astria video --video-model seedance2_fast_720p \
-  --video-prompt "<faceid:1234:1> woman walks down a runway" --duration 5
-astria video --video-model seedance2_fast_720p \
-  --video-prompt "woman wearing a dress walks down a runway" \
-  --reference woman=./model.jpg --reference dress=./dress.jpg
-astria video --video-model seedance2_fast_720p \
-  --video-prompt "transition through these looks in order" \
-  --image-reference ./look-1.jpg --image-reference ./look-2.jpg
-astria variate ./source.mp4 --reference ./dress.jpg \
-  --brief "Keep the performance and replace the wardrobe" --wait
-astria packs list
-astria api GET /prompts --query limit=5   # raw escape hatch
+scripts/sync-plugin.sh --no-local-links
+python3 scripts/validate-plugin.py
+python3 scripts/build-plugin.py /tmp/astria-plugin-preview
 ```
 
-Run `astria --help`, or see the **astria-api** skill for the full reference.
-`astria help` is equivalent, including command paths such as
-`astria help variate`; use `astria -v`, `astria --version`, or
-`astria version` for the installed version.
+The skills are canonical at the repository root. Synchronization materializes
+both packages and both compatibility MCP configurations; validation checks
+source parity and tool examples against schemas generated from the shared CLI.
+`scripts/sync-cli.sh` also synchronizes the sibling Rails MCP contract when
+that checkout is present.
 
-Credentials resolve from environment variables first (`ASTRIA_API_KEY` /
-`ASTRIA_AUTH_TOKEN`, …), then `~/.astria/config.json`. Scope any command to a
-workspace with `-w <id>` (or `-w all`).
+Before releasing this MCP version, deploy the Rails endpoint with OAuth
+dynamic client registration (DCR). Discovery advertises `/oauth/register`,
+so compatible hosts register their public client automatically and then open
+Astria login/consent. HTTPS callbacks and native HTTP loopback IP callbacks
+are supported. The existing `astria-chatgpt` seed remains available for a
+predefined hosted ChatGPT connection. Production host login and callback
+delivery remain rollout checks.
 
-**Profiles** work like the AWS CLI — separate credentials and base URLs per
-profile, handy for a local dev server:
-
-```bash
-astria --profile localhost login --base-url http://localhost:3000
-ASTRIA_PROFILE=localhost astria whoami
-```
-
-`--profile <name>` (before the subcommand) or `ASTRIA_PROFILE` selects one;
-each lives in its own `~/.astria/config.<name>.json`.
+See [`docs/PUBLISHING.md`](docs/PUBLISHING.md) for release preparation,
+connection registration and directory publication. Local package builds do
+not publish a version or deploy the server.
 
 ## License
 

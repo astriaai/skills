@@ -13,9 +13,15 @@ tunes, and a set of **packs** (prompt templates) that can re-shoot the brand's
 entire catalog — and every future collection — in the brand's own visual
 language.
 
-All Astria operations go through the `astria` CLI (see the **astria-api**
-skill) — never raw API calls, never tokens in skill text. Scope every command
-with `-w <workspace_id>`. Everything you register in Astria — faces, garments,
+Use the connected Astria MCP tools (see **astria-api**) for model discovery,
+references, generation, template reads/runs and result checks. Pass
+`workspace: "<workspace_id>"` consistently. Workspace/template creation and
+landing-page HTML currently need the Astria UI or an independently
+authenticated CLI; read **astria-api**'s optional CLI reference for those
+steps. Establish access to these required capabilities before promising the
+full deliverable. OAuth in the host does not authenticate the CLI.
+
+Everything you register in Astria — faces, garments,
 shoes, jewels, poses, backgrounds, props, logo lockups — is a **single-image
 faceid reference tune** whose `name` is a controlled class noun (`woman`, `man`,
 `boy`, `girl`, `dress`, `shirt`, `pants`, `shoes`, `ring`, `necklace`, `chain`,
@@ -30,7 +36,7 @@ tunes, (4) one pack per item-type / outfit formula with a fixed shot battery,
 (5) a QA'd pilot render, then the scaled catalog, and (6) a workspace landing
 page.
 
-Related skills: **astria-api** (the CLI), **unique-headshot** (avatar casting),
+Related skills: **astria-api** (MCP and optional CLI), **unique-headshot** (avatar casting),
 **prompt-writing** (prompt grammar & parameters), **packs-guide** (packs),
 **landing-page-editor** (the `/w/:slug` page).
 
@@ -115,10 +121,10 @@ customer which they want as the lead when the vertical supports several
 
 ## Phase 4 — Create / target the workspace
 
-Use the customer's existing workspace when they name one (`astria workspaces
-list` → target with `-w <id>`); otherwise create one named after the brand
-(via the workspace UI, or `astria api POST /workspaces` if available — confirm
-the id with `astria workspaces list`). Note the house background hex — every
+Use `list_workspaces` to identify the customer's existing workspace and pass
+its ID to subsequent tools. If a new workspace is needed, create it via the
+Astria UI or the optional CLI `astria workspaces create --title "<Brand>"`,
+then confirm its ID with `list_workspaces`. Note the house background hex — every
 studio template pins it twice (in prose and via `--background_color`).
 
 Two-greys convention: packshots on `#F2F2F2` (luminance-flattened), on-model
@@ -129,16 +135,17 @@ studio on `#F5F5F5`/`#e9e9e9`-family off-whites, luxury lookbooks on pure
 
 Avatars are synthetic faces generated from trait-dense prompts, **no reference
 tune** — the **unique-headshot** method. Generate with
-`astria generate --model recraft-4-1 --num-images 2 --aspect-ratio 1:1`, bare
+`generate_images` with the live Recraft 4.1 Pro model ID, `num_images: "2"`,
+`aspect_ratio: "1:1"`, `inpaint_faces: false`, and a fresh idempotency key, bare
 shoulders, hair pulled back, **no jewelry on the face ref** (critical for
 jewelry brands — earrings on a face ref contaminate every render), ≥1 unique
 distinguishing feature, never repeat an ethnicity in a batch. Match casting to
 the Brand DNA (audience age, ethnicity mix, positioning). Present a candidate
 board (ask-user question with thumbnails), then register each winner:
 
-```
-astria tunes create -w <id> --title "<Name> — <brand>" --name woman|man|boy|girl --image-url <winner.jpg>
-```
+Use `create_reference` with `workspace`, `title: "<Name> — <brand>"`, the
+chosen subject class in `name`, `image_url: ["<winner HTTPS URL>"]`, and a
+fresh idempotency key.
 
 **Casting board size: 2–5 faces.** Production brands run one avatar per
 ethnicity and hold **one avatar constant across all shots of a pack** —
@@ -156,20 +163,19 @@ the model (if any) is described verbally and the face is cropped out.
 
 For each pilot SKU, create a faceid tune from the shop's CDN images:
 
-```
-astria tunes create -w <id> --title "<SKU or product title>" --name <class> \
-  --image-url <front.jpg> [--image-url <back.jpg>]
-```
+Call `create_reference` with the workspace ID, SKU/product `title`, subject
+class `name`, an `image_url` array of front/back HTTPS URLs, and a fresh
+idempotency key per SKU/colorway.
 
 - Map `product_type` → tune class with a controlled vocabulary. The class must
   be the *actual subject* — "jewelry" is a poor name; use `ring`/`necklace`/
-  `chain`/`earrings`. Rename + retrain if wrong (`astria tunes update <id> --name ring`).
+  `chain`/`earrings`. Rename and retrain in the tune UI if wrong; reference updates are CLI/UI-only.
 - **Variant products (`type: variable`):** do NOT blindly take `images[0]` — it
   is often the wrong colorway/variant. Match the chosen image to the intended
   variant (or ingest one tune per variant). A mismatch trains a faithful render
   of the *wrong* product.
 - **Non-ASCII image URLs** (Hebrew/RTL/Cyrillic paths) must be
-  **percent-encoded** before `--image-url`, or Astria returns HTTP 422 "could
+  **percent-encoded** before supplying `image_url`, or Astria returns HTTP 422 "could
   not download".
 - Prefer clean product-only images over on-model shots for garment fidelity.
   Include the back photo only when the battery has back views. One tune per
@@ -182,8 +188,10 @@ astria tunes create -w <id> --title "<SKU or product title>" --name <class> \
 
 **A pack = one item-type or outfit formula × a fixed shot battery.** Shot
 variety lives in the templates; per-SKU variety comes from swapping the
-reference tokens. Create with `astria packs create --title "<Brand> — <Formula>"`
-and author each template into the pack (see **astria-api** for pack-authoring).
+reference tokens. Create the pack in the Astria UI or with the optional CLI
+`astria packs create --title "<Brand> — <Formula>"`. Then author each template
+with `generate_images` and `pack_id`; include a fine-tuned reference token in
+`text` and a fresh idempotency key per shot (see **astria-api**).
 Iterate until the pilot passes QA.
 
 ### 7.1 House prompt grammar (studio lookbook)
@@ -214,7 +222,7 @@ Iterate until the pilot passes QA.
   background, rug, carpet, barefoot, missing shoes; no plastic skin, no beauty
   filter, no extra limbs`).
 - Params: **3:4, 4K, num_images 1** (2–4 for the hero front shot). Discover the
-  default model with `astria models`. Detail shots come free via
+  default model and supported resolutions with `list_models`. Detail shots come free via
   `--create_crops 66–72` (full frame + 2 crops) instead of separate prompts.
 
 ### 7.2 Shot batteries per item type
@@ -281,16 +289,19 @@ natural fabric behavior, imperfect drape, soft analog 35mm grain`). Formats
    rerolling blindly. If an item renders wrong repeatedly, inspect the tune's
    training images (bad crops / wrong class / wrong variant are the usual cause).
 4. Scale in phases: best-sellers/newest first for sign-off, then the rest.
-   Iterate over the crawled product list — `tunes create` per SKU, one generate
-   per template with the SKU's tokens swapped in. Name batches
+   Iterate over the crawled product list — `create_reference` per SKU, then
+   `run_template` with its reference IDs (or `generate_images` for individual
+   shots). Use distinct idempotency keys per SKU/run and inspect results with
+   `list_prompts`/`get_prompt` before retrying. Name batches
    (`<BRAND> BATCH1 LOOK 1–N`).
 5. Post-production at volume: background-removal passes for cutouts, 16:9
    recrops for banners, upscale passes for hero shots.
 
 ## Phase 9 — Landing page & handoff
 
-Generate the workspace landing page from the brief (see **landing-page-editor**):
-`astria landing set -w <id> --brief "<positioning, palette, collections, packs to feature>"`.
+Generate the workspace landing page from the brief through the Astria UI or
+optional CLI (see **landing-page-editor**). This step has no MCP tool yet.
+Do not report the landing page as complete until it was saved and verified.
 Report to the customer: workspace link, the casting board, each pack (`/p/<slug>`)
 with its battery, pilot images, and the one-step instruction for future
 collections — *point us at the new products; the packs re-shoot the whole drop

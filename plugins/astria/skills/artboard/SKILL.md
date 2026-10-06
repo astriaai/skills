@@ -17,17 +17,13 @@ the same references, subject, wardrobe, location, lighting, and grade. Preserve
 every `<lora:...>` and `<faceid:...>` token exactly. Give each shot one filmable
 action and do not repeat a camera scale twice in a row.
 
-Call `present_generation` exactly once with the complete current generation
-draft. Put the completed sequence in `video_prompt`, set `text` to the empty
-string, and preserve every other current field, including ordered
-`image_reference_urls`. If the current prompt already
-contains the completed storyboard or the user asks to generate video from it,
-copy that prompt into the video prompt verbatim and omit image prompt text
-entirely. Do not emit an `ASTRIA_PROMPT` or `ASTRIA_VIDEO_PROMPT` command.
+Follow the **storyboard** skill for host-specific presentation: use
+`present_generation` only when Astria exposes it; otherwise show the English
+storyboard text for review. Clear image prompt text in the Astria draft and
+preserve ordered raw references. Do not generate for a planning request.
 
-When the user explicitly asks to generate, use `astria video` with the exact
-approved content as `--video-prompt`, omit `--text`, and never create or pass an
-artboard image. If the content is still in `prompt.text`, move it byte-for-byte
-into `video_prompt` and clear `prompt.text`; do not rewrite it during the
-generation step. Pass each raw reference as a repeated `--image-reference` in
-its original order.
+When explicitly asked to generate, use the connected `generate_video` MCP tool
+(see **astria-api**) with the exact approved `video_prompt`, chosen
+`video_model`, supported duration and a fresh idempotency key. Omit `text`.
+Pass raw HTTPS references as the ordered `image_references` array. For local
+files, follow **astria-api**'s upload/optional CLI guidance.

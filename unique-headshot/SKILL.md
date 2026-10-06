@@ -1,7 +1,6 @@
 ---
 name: unique-headshot
 description: Use when generating unique AI headshot/model faces without a reference tune. Creates diverse, realistic casting-style headshots with detailed facial trait descriptions.
-allowed-tools: Bash(astria:*)
 ---
 
 # Unique Headshot Generator
@@ -113,14 +112,21 @@ Vary lighting for natural diversity:
 ## Generation Rules
 
 1. **No reference tunes** — these prompts generate entirely new faces (no `<faceid:...>` tokens)
-2. **Always generate with Recraft 4.1 Pro**. Before generating, run `astria models` and resolve the current Recraft 4.1 Pro entry by its name/title (the catalog may expose a CLI name such as `recraft-4-1` or a display title such as `Recraft V4.1`). Never hard-code or infer a numeric tune ID, never use the composer default, and never silently substitute another model. Use the discovered tune ID for API creation and in chat `present_generation` — its detailed skin rendering suits beauty headshots.
-3. **Disable face inpainting for every headshot**. Create through `astria api POST /tunes/<resolved-id>/prompts` with `prompt: {text: <headshot prompt>, num_images: 2, aspect_ratio: "1:1", inpaint_faces: false}`. The `astria generate` command does not expose a face-inpainting disable flag, so do not use it for these headshots. If another workflow creates the headshot, make its creation request send `inpaint_faces: false` explicitly; do not rely on defaults. Keep face inpainting off when presenting the generation in chat as well. Recraft has no `--resolution` setting.
+2. **Always generate with Recraft 4.1 Pro**. Before generating, call `list_models` through the connected MCP server (see **astria-api**) and resolve the current Recraft 4.1 Pro entry by its name/title (the catalog may expose a model name such as `recraft-4-1` or a display title such as `Recraft V4.1`). Never hard-code or infer a numeric tune ID, never use the composer default, and never silently substitute another model. Use the discovered tune ID as `generate_images.model` — its detailed skin rendering suits beauty headshots.
+3. **Disable face inpainting for every headshot**. Call `generate_images` with the discovered model ID, English `text`, `num_images: "2"` (unless another count was requested), `aspect_ratio: "1:1"`, `inpaint_faces: false`, and a fresh `idempotency_key`. Send `false` explicitly; never rely on defaults. Recraft has no `resolution` setting. In a CLI-only Astria sandbox, use `astria generate --model <resolved-id> --text "<headshot prompt>" --num-images 2 --aspect-ratio 1:1 --no-inpaint-faces`. If the embedded chat exposes `present_generation`, preserve the same resolved model ID and `inpaint_faces: false` in that draft.
 4. **Never repeat the same ethnicity/heritage** in a batch, and never lean on one
    region across batches — check your last few prompts and move on
 5. **Every prompt must have at least one unique distinguishing feature** in facial geometry or expression (dimple, brow shape, asymmetric smile, cupid's bow, etc.). Do not use a skin mark to satisfy this rule. Unless the user requests one, omit moles, beauty marks, freckles, and other localized pigmentation from the prompt. Describe natural texture with pores or sheen without implying pigmented spots. If a skin marking is explicitly requested, adapt the default suffix to accommodate it.
 6. **Hair is always pulled back** — no hair framing or covering the face
 7. **Default suffix**: `Bare shoulders, no clothing visible, no jewelry. [expression], looking at the camera. Clean white background #fff, [lighting], fine natural skin texture and an even, unmarked complexion, beauty headshot`
 8. **No photographer references or magazine names** in the prompt — keep it clean and generic
+
+Example MCP arguments after resolving the actual Recraft model ID (replace
+the example ID and key; do not copy them into a live request):
+
+```json
+{"tool":"generate_images","arguments":{"model":"123","text":"Close-up studio headshot of a 25-year-old Irish woman with an asymmetric smile, hair pulled back, bare shoulders, clean white background, beauty headshot","num_images":"2","aspect_ratio":"1:1","inpaint_faces":false,"idempotency_key":"headshot-unique-key"}}
+```
 
 ## Batch Generation
 

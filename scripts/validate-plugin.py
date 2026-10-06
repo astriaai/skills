@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import re
+import runpy
 import struct
 from pathlib import Path
 
@@ -30,6 +31,37 @@ def file_map(directory):
         for path in directory.rglob("*")
         if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
     }
+
+
+def validate_tool_examples(sources):
+    # Offline: schemas come from the bundled shared CLI, not a second tool list.
+    core = runpy.run_path(str(ROOT / "bin" / "astria"), run_name="astria_plugin_validation")
+    schemas = {tool["name"]: tool["inputSchema"] for tool in core["operation_catalog"]()}
+    for source in sources.values():
+        for path in source.rglob("*.md"):
+            for block in re.findall(r"```json\s*\n(.*?)\n```", path.read_text(encoding="utf-8"), re.DOTALL):
+                example = json.loads(block)
+                if not isinstance(example, dict) or "tool" not in example:
+                    continue
+                name = example["tool"]
+                require(name in schemas, f"unknown tool in {path}: {name}")
+                schema = schemas[name]
+                arguments = example["arguments"]
+                require(isinstance(arguments, dict), f"non-object arguments in {path}")
+                require(not set(arguments) - schema["properties"].keys(), f"unknown arguments in {path}: {name}")
+                require(set(schema["required"]) <= arguments.keys(), f"missing arguments in {path}: {name}")
+                for key, value in arguments.items():
+                    field = schema["properties"][key]
+                    valid = {
+                        "string": isinstance(value, str),
+                        "boolean": isinstance(value, bool),
+                        "array": isinstance(value, list) and all(isinstance(item, str) for item in value),
+                    }[field["type"]]
+                    require(valid, f"invalid {name}.{key} type in {path}")
+                    if "enum" in field:
+                        require(value in field["enum"], f"invalid {name}.{key} choice in {path}")
+                    if field["type"] == "array" and "enum" in field["items"]:
+                        require(all(item in field["items"]["enum"] for item in value), f"invalid {name}.{key} choices in {path}")
 
 
 def main():
@@ -89,6 +121,8 @@ def main():
     for name, source in sources.items():
         require(file_map(source) == file_map(generated[name]), f"generated skill differs from source: {name}")
 
+    validate_tool_examples(sources)
+
     require((ROOT / "bin" / "astria").read_bytes() == (PLUGIN_ROOT / "bin" / "astria").read_bytes(), "generated CLI is stale")
     require((ROOT / "mcp.json").read_bytes() == (PLUGIN_ROOT / "mcp.json").read_bytes(), "generated MCP config is stale")
     mcp = read_json(PLUGIN_ROOT / "mcp.json")
@@ -96,6 +130,8 @@ def main():
     require(mcp["mcpServers"] == {"astria": {"type": "streamable-http", "url": "https://api.astria.ai/mcp"}}, "incorrect Astria MCP endpoint")
     require(codex["mcpServers"] == "./.mcp.json", "Codex MCP wiring is missing")
     require(read_json(PLUGIN_ROOT / ".mcp.json") == {"mcpServers": {"astria": {"type": "http", "url": "https://api.astria.ai/mcp"}}}, "incorrect compatibility MCP config")
+    require((ROOT / ".mcp.json").read_bytes() == (PLUGIN_ROOT / ".mcp.json").read_bytes(), "Claude and native MCP configs differ")
+    require(not (ROOT / "hooks" / "hooks.json").exists(), "CLI login hook must not run in MCP plugins")
     require(not (PLUGIN_ROOT / "hooks").exists(), "OpenAI directory packages cannot contain hooks")
     require(not list(PLUGIN_ROOT.rglob("*.pyc")), "generated plugin contains .pyc files")
     require(not list(PLUGIN_ROOT.rglob("__pycache__")), "generated plugin contains __pycache__")

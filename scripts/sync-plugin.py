@@ -78,9 +78,9 @@ def main():
         name: {**server, "type": "http"}
         for name, server in portable_mcp["mcpServers"].items()
     }}
-    (PLUGIN_ROOT / ".mcp.json").write_text(json.dumps(compatibility_mcp, indent=2) + "\n", encoding="utf-8")
-    # OpenAI directory submissions cannot contain hooks. Claude loads the
-    # canonical hooks from the repository root instead.
+    (ROOT / ".mcp.json").write_text(json.dumps(compatibility_mcp, indent=2) + "\n", encoding="utf-8")
+    copy_file(ROOT / ".mcp.json", PLUGIN_ROOT / ".mcp.json")
+    # OAuth login is handled by the host; no CLI login hook is packaged.
     if (PLUGIN_ROOT / "hooks").exists():
         shutil.rmtree(PLUGIN_ROOT / "hooks")
     sync_tree(ROOT / ".claude-plugin", PLUGIN_ROOT / ".claude-plugin")
