@@ -112,6 +112,16 @@ RSpec.describe AstriaRoutingEval do
     end
   end
 
+  it 'packages exactly five positive and three negative production reviewer cases' do
+    root = File.expand_path('..', __dir__)
+    %w[plugins/astria/plugin.json plugins/astria/.codex-plugin/plugin.json].each do |relative|
+      cases = JSON.parse(File.read(File.join(root, relative))).fetch('extensions').fetch('com.openai').fetch('review').fetch('test_cases')
+      expect(cases.fetch('positive').length).to eq(5)
+      expect(cases.fetch('negative').length).to eq(3)
+      expect(JSON.generate(cases)).not_to include('fixtures.example')
+    end
+  end
+
   if ENV['ASTRIA_ROUTING_REPORT']
     report = JSON.parse(File.read(ENV.fetch('ASTRIA_ROUTING_REPORT')))
     report.fetch('cases').each do |result|
