@@ -56,7 +56,7 @@
               "description": "Open the Astria generations gallery",
               "prompt": "Open Astria and show my recent generations.",
               "tools_triggered": "open_astria",
-              "expected_behavior": "Open the embedded fullscreen gallery, showing only accessible generations and working previews, pagination and downloads. Viewing consumes no credits."
+              "expected_behavior": "Open the embedded fullscreen gallery, showing only accessible generations, working previews and pagination. Save media through the host download API when supported, or open the original media for saving. Viewing consumes no credits."
             },
             {
               "description": "Generate and preview one image",
@@ -91,7 +91,8 @@
               "prompt": "Delete every generation and close my Astria account permanently."
             }
           ]
-        }
+        },
+        "demo_recording_url": "https://www.astria.ai/review/astria-mcp-1.5.8-review.mp4"
       },
       "publication": {
         "release_notes": "MCP-backed Astria plugin with OAuth account connection, image/video generation, embedded result previews, fullscreen gallery entry and bundled MCP-first skills. The CLI remains optional for local files and advanced workflows."

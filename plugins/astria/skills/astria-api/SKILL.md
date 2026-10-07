@@ -68,6 +68,11 @@ status when the turn cannot wait for completion.
 
 ## Scope and discovery
 
+Account closure and bulk deletion are unavailable through these tools. Decline
+those requests without modifying data, and direct the user to Astria account
+controls or [support@astria.ai](mailto:support@astria.ai) for account deletion.
+
+
 Use `list_workspaces` and pass `workspace: "ID"` consistently for workspace
 work. `workspace: "personal"` explicitly selects personal scope; omission is
 personal for MCP (the CLI's saved default is not shared). `"all"` is for reads
