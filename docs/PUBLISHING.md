@@ -76,3 +76,35 @@ The local package validator and archive build establish wiring/source parity,
 not deployed endpoint availability or successful production host login.
 MCP workflows need no local Python/curl installation or CLI API key; optional
 terminal workflows retain separate CLI authentication.
+
+## Claude directory
+
+The Claude marketplace entry uses `plugins/astria-claude`; canonical skills
+remain at the repository root. Sync generates both packages. Build a separate
+Claude upload archive with `scripts/build-plugin.py dist --target claude`, and
+validate the folder with `claude plugin validate plugins/astria-claude`.
+
+Claude chat and Cowork reject a top-level `bin/` directory. The Claude package
+therefore contains the nine skills, manifest, fixed remote `.mcp.json`, and a
+README. The OpenAI package retains its optional CLI. CI packages both archives
+and their checksums; no repository push or directory submission happens during
+a local build.
+
+At <https://claude.ai/directory/manage>, submit the MCP server first as a
+connector using the universal URL `https://mcp.astria.ai/mcp` and OAuth DCR.
+Submit the plugin bundle from `astriaai/skills`, folder `plugins/astria-claude`,
+from the same organization and pair the listings. The repository must contain
+the generated Claude package on the submitted branch. Directory terms and
+review remain separate from creating a local package.
+
+Before claiming parity, test Astria consent, `get_profile`, generation results,
+gallery, media saving, token refresh and revocation in actual Claude hosts.
+Use a HTTPS media URL for input; a phone attachment is not automatically an
+Astria-accessible URL. The global gallery navigation metadata is ChatGPT-only;
+Claude opens the same gallery through `open_astria`. Record mobile and UI
+results separately from package/protocol validation.
+
+References: [plugin layout](https://claude.com/docs/plugins/build),
+[platform support](https://claude.com/docs/plugins/platform-support),
+[OAuth requirements](https://claude.com/docs/connectors/building/authentication),
+[directory publication](https://claude.com/docs/directory/publish).

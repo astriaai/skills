@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "astria",
-      "source": "./",
+      "source": "./plugins/astria-claude",
       "description": "Generate images and video, manage references and photoshoot templates through OAuth-connected Astria MCP. Includes optional CLI tools for local media and advanced workflows.",
       "version": "1.5.8",
       "category": "creative",
@@ -29,15 +29,15 @@
         "headshots"
       ],
       "skills": [
-        "./astria-api",
-        "./prompt-writing",
-        "./packs-guide",
-        "./unique-headshot",
-        "./navigation",
-        "./landing-page-editor",
-        "./store-photoshoot",
-        "./storyboard",
-        "./artboard"
+        "./skills/astria-api",
+        "./skills/prompt-writing",
+        "./skills/packs-guide",
+        "./skills/unique-headshot",
+        "./skills/navigation",
+        "./skills/landing-page-editor",
+        "./skills/store-photoshoot",
+        "./skills/storyboard",
+        "./skills/artboard"
       ]
     }
   ]

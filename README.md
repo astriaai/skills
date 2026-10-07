@@ -26,6 +26,28 @@ marketplace. Imported marketplaces can be refreshed with **Sync now**. Public
 directory availability requires a reviewed, published OpenAI plugin version
 and its registered Astria connection.
 
+## Install in Claude (web, desktop and mobile)
+
+Build the Claude archive with:
+
+```bash
+python3 scripts/build-plugin.py /tmp/astria-plugin-preview --target claude
+```
+
+Upload `astria-claude-X.Y.Z.zip` through **Customize > Plugins > Add > Upload
+plugin**, then connect Astria from its **Connectors** tab. Complete Astria
+OAuth sign-in and consent; choose **Sign in now > Register automatically**
+when prompted. DCR registers Claude's public client without a client secret.
+The remote connection works in the iOS and Android apps as well. Interactive
+previews use the same MCP Apps resources as ChatGPT, when supported by the host.
+Ask Claude to open the Astria gallery to browse generations.
+
+The Claude marketplace points at `plugins/astria-claude`, a package without a
+top-level `bin/` directory (which Claude chat and Cowork reject). Its nine
+skills and MCP endpoint are generated from the same sources as OpenAI/Codex.
+See [Claude setup and limitations](docs/CLAUDE.md). A local archive does not
+publish a directory listing.
+
 ## Install in Claude Code
 
 ```text
@@ -33,11 +55,10 @@ and its registered Astria connection.
 /plugin install astria@astria
 ```
 
-Use `/mcp` to connect/authenticate Astria. The root `.mcp.json` is generated
-from the same endpoint as the OpenAI/Codex package, following the
-[Claude plugin configuration](https://code.claude.com/docs/en/plugins-reference#mcpservers).
-The host automatically registers its public OAuth client through DCR after
-the server update is deployed; see the rollout requirements below.
+Use `/mcp` to connect/authenticate Astria, or preview the local package with
+`claude --plugin-dir ./plugins/astria-claude`. The `.mcp.json` uses a fixed
+HTTPS URL; no API key, client secret, shell process, or CLI login hook is
+required. CLI-only workflows require a separately installed Astria CLI.
 
 ## Install skills in other agents
 

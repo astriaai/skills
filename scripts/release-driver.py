@@ -23,7 +23,7 @@ ALLOWED_RELEASE_FILES = {
     ".claude-plugin/marketplace.json",
     ".claude-plugin/plugin.json",
 }
-ALLOWED_RELEASE_PREFIXES = ("plugins/astria/",)
+ALLOWED_RELEASE_PREFIXES = ("plugins/astria/", "plugins/astria-claude/",)
 
 
 class ReleaseError(RuntimeError):

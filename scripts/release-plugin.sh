@@ -10,6 +10,7 @@ python3 "$ROOT/scripts/set-plugin-version.py" "$VERSION"
 "$ROOT/scripts/sync-plugin.sh"
 python3 "$ROOT/scripts/validate-plugin.py" --expected-version "$VERSION"
 python3 "$ROOT/scripts/build-plugin.py" "$ROOT/dist"
+python3 "$ROOT/scripts/build-plugin.py" "$ROOT/dist" --target claude
 
 echo "Release files are ready. Commit, tag v$VERSION, and push; GitHub Actions publishes the archive."
 echo "OpenAI public-directory updates still require review and Publish in the OpenAI Platform portal."

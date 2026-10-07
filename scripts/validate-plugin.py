@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_ROOT = ROOT / "plugins" / "astria"
+CLAUDE_ROOT = ROOT / "plugins" / "astria-claude"
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 
 
@@ -113,13 +114,24 @@ def main():
     require(marketplace_entry["policy"] == {"installation": "AVAILABLE", "authentication": "ON_INSTALL"}, "Codex marketplace policy is incorrect")
 
     sources = {
-        Path(entry).name: ROOT / entry
+        Path(entry).name: ROOT / Path(entry).name
         for entry in claude_marketplace["plugins"][0]["skills"]
     }
     generated = {path.name: path for path in (PLUGIN_ROOT / "skills").iterdir() if path.is_dir()}
     require(sources.keys() == generated.keys(), "generated skill names do not match the source marketplace")
     for name, source in sources.items():
         require(file_map(source) == file_map(generated[name]), f"generated skill differs from source: {name}")
+
+    require(claude_marketplace["plugins"][0]["source"] == "./plugins/astria-claude", "Claude marketplace must use the chat-compatible package")
+    require(read_json(CLAUDE_ROOT / ".claude-plugin" / "plugin.json") == claude, "Claude manifest is stale")
+    require(not (CLAUDE_ROOT / "bin").exists(), "top-level bin prevents Claude chat and Cowork installation")
+    require(not (CLAUDE_ROOT / "hooks").exists(), "Claude OAuth workflows need no login hooks")
+    require(file_map(CLAUDE_ROOT / "skills") == file_map(PLUGIN_ROOT / "skills"), "Claude and OpenAI skills differ")
+    require((CLAUDE_ROOT / ".mcp.json").read_bytes() == (ROOT / ".mcp.json").read_bytes(), "Claude MCP configuration is stale")
+    require((CLAUDE_ROOT / "README.md").read_bytes() == (ROOT / "docs" / "CLAUDE.md").read_bytes(), "Claude README is stale")
+    require(len((CLAUDE_ROOT / "README.md").read_text().split()) >= 40, "Claude directory requires a README of at least 40 words")
+    require(claude["license"] == "MIT", "Claude license is required")
+    require(not list(CLAUDE_ROOT.rglob("*.pyc")), "Claude plugin contains Python bytecode")
 
     validate_tool_examples(sources)
 

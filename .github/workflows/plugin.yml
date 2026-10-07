@@ -24,14 +24,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Test release tooling
         run: python3 -m unittest discover -s tests -v
-      - name: Refresh generated OpenAI plugin
+      - name: Refresh generated plugins
         run: scripts/sync-plugin.sh --no-local-links
       - name: Require committed plugin output
         run: |
-          git status --porcelain --untracked-files=all -- plugins/astria > /tmp/astria-plugin-status
+          git status --porcelain --untracked-files=all -- plugins/astria plugins/astria-claude > /tmp/astria-plugin-status
           if [ -s /tmp/astria-plugin-status ]; then
             cat /tmp/astria-plugin-status
-            echo "Run scripts/sync-plugin.sh and commit plugins/astria."
+            echo "Run scripts/sync-plugin.sh and commit both generated packages."
             exit 1
           fi
       - name: Validate release tag
@@ -41,7 +41,9 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: scripts/validate-plugin.py
       - name: Build upload archive
-        run: scripts/build-plugin.py dist
+        run: |
+          scripts/build-plugin.py dist
+          scripts/build-plugin.py dist --target claude
       - uses: actions/upload-artifact@v4
         with:
           name: astria-plugin

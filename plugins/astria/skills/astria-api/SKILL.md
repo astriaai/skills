@@ -66,6 +66,17 @@ event; a failure event can represent an attempt that later retries. With no
 events support, use spaced, bounded `get_prompt` checks and report pending
 status when the turn cannot wait for completion.
 
+## Embedded results and gallery
+
+Hosts supporting MCP Apps render image and video results directly from
+`generate_images`, `generate_video`, and `get_prompt`. Let the embedded view
+show the media; include the returned prompt ID and status in the reply.
+Use `open_astria` when the user asks to browse their generations. Its
+`workspace` accepts `personal`, `all`, or a workspace ID. Viewing is read-only.
+`get_prompt_view` is app-only; use `get_prompt` for model-side status checks.
+On Claude, connect Astria from the plugin's Connectors tab; the remote
+connection also works on mobile. CLI-only steps still need a terminal.
+
 ## Scope and discovery
 
 Account closure and bulk deletion are unavailable through these tools. Decline

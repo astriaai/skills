@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Materialize the native OpenAI plugin from the canonical skill sources."""
+"""Materialize the OpenAI and Claude plugins from the canonical skill sources."""
 
 import json
 import os
@@ -11,6 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_ROOT = ROOT / "plugins" / "astria"
+CLAUDE_ROOT = ROOT / "plugins" / "astria-claude"
 CLAUDE_MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
 
 
@@ -47,7 +48,7 @@ def copy_file(source, destination, executable=False):
 
 def skill_sources():
     plugin = read_json(CLAUDE_MARKETPLACE)["plugins"][0]
-    return [(Path(entry).name, ROOT / entry) for entry in plugin["skills"]]
+    return [(Path(entry).name, ROOT / Path(entry).name) for entry in plugin["skills"]]
 
 
 def main():
@@ -85,7 +86,13 @@ def main():
         shutil.rmtree(PLUGIN_ROOT / "hooks")
     sync_tree(ROOT / ".claude-plugin", PLUGIN_ROOT / ".claude-plugin")
 
-    print(f"Synced {len(sources)} skills and the Astria CLI -> {PLUGIN_ROOT}")
+    CLAUDE_ROOT.mkdir(parents=True, exist_ok=True)
+    sync_tree(PLUGIN_ROOT / "skills", CLAUDE_ROOT / "skills")
+    copy_file(ROOT / ".claude-plugin" / "plugin.json", CLAUDE_ROOT / ".claude-plugin" / "plugin.json")
+    copy_file(ROOT / ".mcp.json", CLAUDE_ROOT / ".mcp.json")
+    copy_file(ROOT / "docs" / "CLAUDE.md", CLAUDE_ROOT / "README.md")
+
+    print(f"Synced {len(sources)} skills -> {PLUGIN_ROOT} and {CLAUDE_ROOT}")
 
 
 if __name__ == "__main__":
