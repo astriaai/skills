@@ -9,9 +9,12 @@ OAuth login in the host does not authenticate this independent CLI.
 
 ## CLI authentication and usage
 
-CLI-only operations go through the bundled **`astria`** command-line tool. It
-handles authentication, the API base URL, and workspace scoping for you — never
-build raw `curl` calls and never read API tokens from environment variables.
+CLI-only operations use an available **`astria`** command-line tool. The
+OpenAI/Codex package bundles it; the Claude package requires a separately
+installed [Astria CLI](https://github.com/astriaai/cli). Use these workflows
+only when a terminal and independent CLI authentication are available. The CLI
+handles authentication, the API base URL, and workspace scoping — never build
+raw `curl` calls or read API tokens from environment variables.
 
 Output is JSON on stdout, so you can parse ids and image URLs directly.
 
