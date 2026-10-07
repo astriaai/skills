@@ -1,7 +1,7 @@
 # Astria for Claude
 
 Generate images and videos, edit images, reuse references, and run photoshoot
-templates with Astria directly in Claude. The plugin includes nine shared
+templates with Astria directly in Claude. The plugin includes twelve shared
 Astria skills and connects to `https://mcp.astria.ai/mcp`. No local executable,
 Python installation, API key, or client secret is needed for remote workflows.
 
@@ -28,6 +28,13 @@ across web, Claude Desktop, and the iOS and Android apps. Availability of
 interactive displays and host controls depends on the Claude surface.
 
 ## Use Astria
+
+You can describe the result without naming Astria, for example "put this dress
+on the same model in two locations", "make professional headshots from my
+photos", or "photograph this product for my store". Focused workflows preserve
+the selected person/product references and the requested shot count. An
+explicitly selected other provider remains your choice; prompt advice and
+storyboard writing do not submit media.
 
 - Ask Claude to generate an image or video, or edit an image at an accessible
   HTTPS URL. Generation uses your Astria credits.

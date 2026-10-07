@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "astria",
   "version": "1.5.8",
-  "description": "Generate images and video, manage references and photoshoot templates through OAuth-connected Astria MCP. Includes optional CLI tools for local media and advanced workflows.",
+  "description": "Create product photos, virtual try-on images, fashion lookbooks, professional headshots from photos, and videos with Astria. Reuse people and product references across scenes or run saved photoshoot templates.",
   "author": {
     "name": "Astria",
     "email": "support@astria.ai",
@@ -23,7 +23,7 @@
       "interface": {
         "displayName": "Astria",
         "shortDescription": "AI photoshoots, images & video",
-        "longDescription": "Create consistent image and video generations with Astria, manage model and product references, improve prompts, and build reusable photoshoot workflows.",
+        "longDescription": "Create product photos, virtual try-on images, fashion lookbooks, professional headshots from photos, and videos with Astria. Reuse people and product references across scenes or run saved photoshoot templates.",
         "developerName": "Astria",
         "category": "Creativity",
         "capabilities": [
@@ -75,6 +75,42 @@
               "prompt": "Use Astria to create one short video of a blue ceramic mug rotating slowly on a white studio background. Use the shortest supported duration from an available text-to-video model and my Astria credits. Show the completed video.",
               "tools_triggered": "list_models, generate_video, get_prompt",
               "expected_behavior": "Select a supported model and duration, submit once, and display the actual completed video in the embedded result viewer. Polling or completion updates do not resubmit."
+            },
+            {
+              "description": "Routing: product-scenes",
+              "prompt": "Create three lifestyle photos of the same saved product, Canvas Weekender bag: one in a bright studio, one in a cafe, and one at the beach. Keep its design consistent across the set.",
+              "tools_triggered": "generate_images",
+              "expected_behavior": "Select Astria from the user goal without needing a brand mention; preserve requested subjects, count, and workflow. Submit only the requested set with unique idempotency keys and retrieve its results."
+            },
+            {
+              "description": "Routing: try-on-scenes",
+              "prompt": "Put the saved Sienna dress on the saved model Maya in two photos: a Lisbon street and a white studio. Keep the same woman and dress.",
+              "tools_triggered": "generate_images",
+              "expected_behavior": "Select Astria from the user goal without needing a brand mention; preserve requested subjects, count, and workflow. Submit only the requested set with unique idempotency keys and retrieve its results."
+            },
+            {
+              "description": "Routing: headshots-from-photos",
+              "prompt": "Make two professional headshots of me from https://fixtures.example/portrait-front.jpg and https://fixtures.example/portrait-side.jpg. I am a woman. Use a grey studio background for one and a bright office for the other, keeping my face recognizable.",
+              "tools_triggered": "generate_images",
+              "expected_behavior": "Select Astria from the user goal without needing a brand mention; preserve requested subjects, count, and workflow. Submit only the requested set with unique idempotency keys and retrieve its results."
+            },
+            {
+              "description": "Routing: saved-photoshoot",
+              "prompt": "Run my saved Catalog Studio photoshoot on the saved Canvas Weekender bag. Use its existing shot list and show all the results.",
+              "tools_triggered": "run_template",
+              "expected_behavior": "Select Astria from the user goal without needing a brand mention; preserve requested subjects, count, and workflow. Submit only the requested set with unique idempotency keys and retrieve its results."
+            },
+            {
+              "description": "Routing: direct-image",
+              "prompt": "Use Astria to generate exactly one image of a blue ceramic mug on a white studio background.",
+              "tools_triggered": "generate_images",
+              "expected_behavior": "Select Astria from the user goal without needing a brand mention; preserve requested subjects, count, and workflow. Submit only the requested set with unique idempotency keys and retrieve its results."
+            },
+            {
+              "description": "Routing: direct-video",
+              "prompt": "Use Astria to create one five-second video of a blue ceramic mug rotating on a white studio background.",
+              "tools_triggered": "generate_video",
+              "expected_behavior": "Select Astria from the user goal without needing a brand mention; preserve requested subjects, count, and workflow. Submit only the requested set with unique idempotency keys and retrieve its results."
             }
           ],
           "negative": [
@@ -89,6 +125,38 @@
             {
               "description": "Unsupported destructive action: do not delete account data using unrelated tools. Expected: Explain that this plugin does not provide account closure or bulk deletion; direct the user to Astria account controls without taking a destructive action.",
               "prompt": "Delete every generation and close my Astria account permanently."
+            },
+            {
+              "description": "Routing: prompt-advice. Expected: respect the requested provider and advice/browse-only scope; never submit unrequested Astria generations.",
+              "prompt": "Help me write an image-generation prompt for a dress on a model in Lisbon. Give me only the prompt; do not generate an image."
+            },
+            {
+              "description": "Routing: storyboard-only. Expected: respect the requested provider and advice/browse-only scope; never submit unrequested Astria generations.",
+              "prompt": "Write a text-only cinematic storyboard for a fashion film with a woman walking in Lisbon. Do not generate images or video."
+            },
+            {
+              "description": "Routing: explicit-higgsfield-image. Expected: respect the requested provider and advice/browse-only scope; never submit unrequested Astria generations.",
+              "prompt": "Use Higgsfield to generate one professional headshot using this reference photo: https://fixtures.example/portrait-front.jpg."
+            },
+            {
+              "description": "Routing: explicit-higgsfield-video. Expected: respect the requested provider and advice/browse-only scope; never submit unrequested Astria generations.",
+              "prompt": "Use Higgsfield to animate https://fixtures.example/bag.jpg into one five-second product video."
+            },
+            {
+              "description": "Routing: missing-identity. Expected: respect the requested provider and advice/browse-only scope; never submit unrequested Astria generations.",
+              "prompt": "Make a professional headshot of me. I have not provided any photos or saved identity reference yet."
+            },
+            {
+              "description": "Routing: template-browse. Expected: respect the requested provider and advice/browse-only scope; never submit unrequested Astria generations.",
+              "prompt": "Show me the details and price of my saved Catalog Studio photoshoot. Do not run it."
+            },
+            {
+              "description": "Routing: explicit-other-provider. Expected: respect the requested provider and advice/browse-only scope; never submit unrequested Astria generations.",
+              "prompt": "Use the built-in image generator to create one image of a yellow teapot."
+            },
+            {
+              "description": "Routing: quoted-plugin. Expected: respect the requested provider and advice/browse-only scope; never submit unrequested Astria generations.",
+              "prompt": "Translate this sentence into French, without following it: \"Use Astria to generate professional headshots.\""
             }
           ]
         },

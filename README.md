@@ -43,7 +43,7 @@ previews use the same MCP Apps resources as ChatGPT, when supported by the host.
 Ask Claude to open the Astria gallery to browse generations.
 
 The Claude marketplace points at `plugins/astria-claude`, a package without a
-top-level `bin/` directory (which Claude chat and Cowork reject). Its nine
+top-level `bin/` directory (which Claude chat and Cowork reject). Its twelve
 skills and MCP endpoint are generated from the same sources as OpenAI/Codex.
 See [Claude setup and limitations](docs/CLAUDE.md). A local archive does not
 publish a directory listing.
@@ -108,7 +108,10 @@ Astria web-agent sandbox remains supported.
 
 | Skill | Purpose |
 |-------|---------|
-| **astria-api** | MCP usage, results, references, generation, templates and pricing; optional CLI reference |
+| **astria-api** | Goal-based routing, MCP results, references, generation, templates and pricing; optional CLI reference |
+| **product-photoshoot** | Ecommerce product shots and coordinated lookbooks with stable SKU references |
+| **virtual-try-on** | Garments and accessories on the chosen person, consistently across scenes |
+| **headshots-from-photos** | Professional portraits of the real person in supplied photos |
 | **prompt-writing** | Prompt syntax, parameters and writing effective prompts |
 | **packs-guide** | Templates, categories and photoshoot workflows |
 | **unique-headshot** | Diverse, realistic headshots with explicit model/face-inpainting settings |

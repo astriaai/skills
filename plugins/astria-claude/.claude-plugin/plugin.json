@@ -1,6 +1,6 @@
 {
   "name": "astria",
-  "description": "Generate images and video, manage references and photoshoot templates through OAuth-connected Astria MCP, with embedded previews and a generations gallery.",
+  "description": "Create product photos, virtual try-on images, fashion lookbooks, professional headshots from photos, and videos with Astria. Reuse people and product references across scenes or run saved photoshoot templates.",
   "version": "1.5.8",
   "author": {
     "name": "Astria",

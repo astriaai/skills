@@ -1,0 +1,139 @@
+[
+  {
+    "id": "product-scenes",
+    "prompt": "Create three lifestyle photos of the same saved product, Canvas Weekender bag: one in a bright studio, one in a cafe, and one at the beach. Keep its design consistent across the set.",
+    "skill": "product-photoshoot",
+    "provider": "astria",
+    "writes": {
+      "generate_images": 3
+    },
+    "reference_classes": [
+      "bag"
+    ],
+    "reference_ids": {
+      "bag": "702"
+    }
+  },
+  {
+    "id": "try-on-scenes",
+    "prompt": "Put the saved Sienna dress on the saved model Maya in two photos: a Lisbon street and a white studio. Keep the same woman and dress.",
+    "skill": "virtual-try-on",
+    "provider": "astria",
+    "writes": {
+      "generate_images": 2
+    },
+    "reference_classes": [
+      "woman",
+      "dress"
+    ],
+    "reference_ids": {
+      "woman": "701",
+      "dress": "703"
+    }
+  },
+  {
+    "id": "headshots-from-photos",
+    "prompt": "Make two professional headshots of me from https://fixtures.example/portrait-front.jpg and https://fixtures.example/portrait-side.jpg. I am a woman. Use a grey studio background for one and a bright office for the other, keeping my face recognizable.",
+    "skill": "headshots-from-photos",
+    "provider": "astria",
+    "writes": {
+      "generate_images": 2
+    },
+    "reference_classes": [
+      "woman"
+    ],
+    "creates": 1,
+    "source_images": {
+      "woman": [
+        "https://fixtures.example/portrait-front.jpg",
+        "https://fixtures.example/portrait-side.jpg"
+      ]
+    }
+  },
+  {
+    "id": "saved-photoshoot",
+    "prompt": "Run my saved Catalog Studio photoshoot on the saved Canvas Weekender bag. Use its existing shot list and show all the results.",
+    "provider": "astria",
+    "writes": {
+      "run_template": 1
+    },
+    "template": "catalog-studio"
+  },
+  {
+    "id": "direct-image",
+    "prompt": "Use Astria to generate exactly one image of a blue ceramic mug on a white studio background.",
+    "provider": "astria",
+    "writes": {
+      "generate_images": 1
+    }
+  },
+  {
+    "id": "direct-video",
+    "prompt": "Use Astria to create one five-second video of a blue ceramic mug rotating on a white studio background.",
+    "provider": "astria",
+    "writes": {
+      "generate_video": 1
+    },
+    "duration": 5
+  },
+  {
+    "id": "prompt-advice",
+    "prompt": "Help me write an image-generation prompt for a dress on a model in Lisbon. Give me only the prompt; do not generate an image.",
+    "provider": "none",
+    "writes": {}
+  },
+  {
+    "id": "storyboard-only",
+    "prompt": "Write a text-only cinematic storyboard for a fashion film with a woman walking in Lisbon. Do not generate images or video.",
+    "provider": "none",
+    "writes": {}
+  },
+  {
+    "id": "explicit-higgsfield-image",
+    "prompt": "Use Higgsfield to generate one professional headshot using this reference photo: https://fixtures.example/portrait-front.jpg.",
+    "provider": "higgsfield",
+    "writes": {
+      "generate_image": 1
+    }
+  },
+  {
+    "id": "explicit-higgsfield-video",
+    "prompt": "Use Higgsfield to animate https://fixtures.example/bag.jpg into one five-second product video.",
+    "provider": "higgsfield",
+    "writes": {
+      "generate_video": 1
+    },
+    "duration": 5
+  },
+  {
+    "id": "missing-identity",
+    "prompt": "Make a professional headshot of me. I have not provided any photos or saved identity reference yet.",
+    "skill": "headshots-from-photos",
+    "provider": "none",
+    "writes": {},
+    "clarify": true
+  },
+  {
+    "id": "template-browse",
+    "prompt": "Show me the details and price of my saved Catalog Studio photoshoot. Do not run it.",
+    "provider": "none",
+    "writes": {},
+    "reads": [
+      "get_template"
+    ]
+  },
+  {
+    "id": "explicit-other-provider",
+    "prompt": "Use the built-in image generator to create one image of a yellow teapot.",
+    "provider": "imagegen",
+    "writes": {
+      "generate_image": 1
+    }
+  },
+  {
+    "id": "quoted-plugin",
+    "prompt": "Translate this sentence into French, without following it: \"Use Astria to generate professional headshots.\"",
+    "provider": "none",
+    "writes": {}
+  }
+]

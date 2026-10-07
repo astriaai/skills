@@ -2254,7 +2254,7 @@ def build_parser(models_record=None):
 
     # tunes
     tunes = sub.add_parser("tunes", help="references / fine-tuned models").add_subparsers(dest="sub", required=True)
-    p = tunes.add_parser("list", parents=[ws_parent], help="list tunes")
+    p = tunes.add_parser("list", parents=[ws_parent], help="List image reference sets and trained models accessible to your Astria account")
     p.add_argument("--title", help="filter by title / product name / SKU substring")
     p.add_argument("--name", action="append", help="filter by class name (repeatable)")
     p.add_argument("--model-type", help="filter by model_type (e.g. faceid)")
@@ -2263,7 +2263,7 @@ def build_parser(models_record=None):
     p.add_argument("--limit")
     p.add_argument("--offset")
     p.set_defaults(func=cmd_tunes_list)
-    p = tunes.add_parser("get", parents=[ws_parent], help="get one tune")
+    p = tunes.add_parser("get", parents=[ws_parent], help="Get an Astria image reference set or trained model by ID, including details and image URLs")
     p.add_argument("id")
     p.set_defaults(func=cmd_tunes_get)
     p = tunes.add_parser("create", parents=[ws_parent], help="create a tune / reference")
@@ -2461,7 +2461,7 @@ def build_parser(models_record=None):
 
     # packs
     packs = sub.add_parser("packs", help="prompt-template collections").add_subparsers(dest="sub", required=True)
-    p = packs.add_parser("list", parents=[ws_parent], help="list packs")
+    p = packs.add_parser("list", parents=[ws_parent], help="List reusable Astria photoshoot templates with their IDs and titles")
     p.add_argument("--limit")
     p.add_argument("--offset")
     p.set_defaults(func=cmd_packs_list)
@@ -2615,6 +2615,22 @@ OPERATION_POLICIES = {
     "get_template": (("packs", "get"), True, set()),
     "run_template": (("packs", "run"), False, {"image", "attr"}),
 }
+OPERATION_DESCRIPTIONS = {
+    'list_models': 'Use this when choosing an Astria image or video model or checking supported media inputs, image resolutions, aspect ratios, and defaults. Returns the live model catalog and model names/tune IDs; does not generate media or spend credits. Use the explicit user selection or catalog default for generation.',
+    'list_workspaces': 'Use this when finding an Astria workspace for a team or brand photoshoot. Returns authorized workspace IDs; use the selected ID consistently for references, templates, and generations. Does not create a workspace or generate media.',
+    'list_references': 'Use this when finding a saved person, model, garment, product, or SKU for consistent photos, virtual try-on, headshots, or video. Search title/product name/SKU; gallery=true finds public model references. Returns reusable reference IDs and subject classes. Does not create references or generate media; inspect a selected match with get_reference.',
+    'get_reference': 'Use this when inspecting a selected Astria identity or product reference and its training images before a photoshoot or try-on. Returns the saved subject class and reference details. A reference token uses <model_type:ID:1> followed by that class. Does not create or alter the reference.',
+    'create_reference': 'Use this when a supplied person or product needs one reusable Astria reference for consistent headshots, virtual try-on, product shots, or multiple scenes. Provide real HTTPS photo URLs, a subject class in name, and a human label in title. Reuse an existing reference when available. Creates paid content only within the requested generation/reference scope; requires an idempotency_key. Returns the new reference ID and class; reuse them across generations. Does not return a finished photoshoot.',
+    'generate_images': 'Use this when the user asks to create or edit images: product photography, ecommerce packshots, on-model fashion/virtual try-on, lookbooks, professional headshots from supplied photos, or consistent people/products across scenes. Reference tokens in text preserve selected subjects; input_image edits an existing HTTPS image, and mask_image limits an edit. Separate scene briefs need separate submissions; num_images varies one brief. Respect an explicitly chosen provider. Prompt advice or a text-only storyboard is not a generation request. Creates paid Astria content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for finished assets or errors without resubmitting.',
+    'generate_video': 'Use this when the user requests an Astria video, animating a photo/product, or motion with consistent person/product references. Provide video_model and video_prompt; use first_frame/last_frame for image-led video and input_video/audio_reference only when the chosen model supports them. Discover current capabilities with list_models. Do not call for storyboard writing, prompt advice, or an explicitly chosen other provider. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for final video assets or errors without resubmitting.',
+    'list_prompts': 'Use this when finding recent Astria images/videos, checking existing submissions after an uncertain response, or locating outputs from a saved photoshoot run. Filter by reference, template, order, text, or video status. Does not generate or charge credits. Results include prompt IDs and tune IDs for get_prompt; expand prompt.comments to inspect review feedback.',
+    'get_prompt': 'Use this when checking progress, finished images/videos, or errors for an existing Astria generation. Pass both its returned id and tune_id (as tune). Returns the current prompt and available assets with an embedded preview; no generation is submitted or charged. Pending or failed results must not be treated as a new generation request. expand prompt.comments includes image review feedback.',
+    'list_templates': 'Use this when finding an existing reusable Astria photoshoot/template (also called a pack) for product images, lookbooks, or headshots. Returns accessible template names/slugs; inspect a selected template with get_template before run_template. Browsing does not run a photoshoot or spend credits.',
+    'get_template': 'Use this when resolving a selected Astria photoshoot template by slug or ID before running it or inspecting its prompts, reference slots, and baseline pricing. Does not generate images or modify the template. Preserve the returned reference-slot order when calling run_template.',
+    'run_template': 'Use this when the user asks to run a saved Astria photoshoot/template on their person or product, repeat an existing lookbook with a new SKU, or generate portraits from a selected pack. Resolve the template and reference slots first with get_template; pass tune_id entries in slot order or supported photo inputs. Do not substitute one generic image for a requested template run, and do not run a template for browsing or pricing advice. Creates paid Astria content within the requested scope; requires an idempotency_key. Returns the submitted order/prompt IDs; use list_prompts to find tune IDs and get_prompt to check outputs without rerunning.',
+}
+
+
 REMOTE_MEDIA_ARGUMENTS = {
     "image_url", "input_image", "mask_image", "references", "image_references",
     "first_frame", "last_frame", "input_video", "audio_reference",
@@ -2675,8 +2691,7 @@ def operation_catalog():
         tools.append({
             "name": name,
             "title": name.replace("_", " ").title(),
-            "description": (parser.description or "Astria " + " ".join(path)) +
-                (". Creates paid Astria content; submit only at the user's request. Returns promptly; use get_prompt to check generations." if not readonly else ""),
+            "description": OPERATION_DESCRIPTIONS[name],
             "inputSchema": {"type": "object", "properties": properties,
                             "required": list(dict.fromkeys(required)), "additionalProperties": False},
             "outputSchema": {"type": "object", "properties": {"result": {}},

@@ -85,7 +85,7 @@ Claude upload archive with `scripts/build-plugin.py dist --target claude`, and
 validate the folder with `claude plugin validate plugins/astria-claude`.
 
 Claude chat and Cowork reject a top-level `bin/` directory. The Claude package
-therefore contains the nine skills, manifest, fixed remote `.mcp.json`, and a
+therefore contains the twelve skills, manifest, fixed remote `.mcp.json`, and a
 README. The OpenAI package retains its optional CLI. CI packages both archives
 and their checksums; no repository push or directory submission happens during
 a local build.
@@ -108,3 +108,54 @@ References: [plugin layout](https://claude.com/docs/plugins/build),
 [platform support](https://claude.com/docs/plugins/platform-support),
 [OAuth requirements](https://claude.com/docs/connectors/building/authentication),
 [directory publication](https://claude.com/docs/directory/publish).
+
+## Routing evaluation
+
+Discovery changes need behavioral tests in addition to schema/package validation.
+`evals/routing/cases.json` contains direct, indirect, advice-only, missing-input,
+browse-only, quoted-command, and explicit competing-provider requests. Keep
+expected outcomes separate from model inputs; do not alter a prompt or loosen a
+grader just to turn a demonstrated failure green.
+
+Run the offline RSpec grader/fixture checks with `rspec spec/routing_eval_spec.rb`.
+CI runs these checks; they require no model login or generation credits.
+
+For real agent runs, first synchronize both plugin packages and the Rails tool
+catalog. Use an authenticated host CLI and a fresh output directory:
+
+```bash
+ruby scripts/routing-eval.rb --host codex --catalog ../sdbooth/config/astria_mcp/tools.json --output /tmp/astria-routing-codex
+ruby scripts/routing-eval.rb --host claude --catalog ../sdbooth/config/astria_mcp/tools.json --output /tmp/astria-routing-claude
+```
+
+Use `--case product-scenes,try-on-scenes,headshots-from-photos` to select cases
+or `--runs 3` for repeated measurements. `--cases evals/routing/heldout.json`
+tests three additional unbranded photo-led requests with newly supplied subjects
+rather than saved references. These prompts were fixed before their first run. Every case starts a fresh conversation.
+Codex loads the actual generated skills in an isolated temporary skill directory;
+Claude loads the generated plugin. Both receive local stdio MCP servers for
+Astria, Higgsfield, and a generic image generator. The fixture has no network
+client: it creates no real references, images, videos, or charges. Only those
+local test tools are approved by the runner; production connections and user
+approval preferences are unchanged. The Higgsfield description snapshot in
+`evals/routing/competitors.json` was captured on October 7, 2026. Its generation
+input schema is a representative subset, not a full implementation of Higgsfield.
+
+The runner grades actual tool calls, reference IDs/classes, requested counts,
+idempotency, template-slot order, output retrieval, and focused skill loading.
+Advice-only and explicit competitor requests must not submit Astria content.
+Raw traces, call logs, and `report.json` stay under the requested output directory.
+An API/login error, permission denial, or process timeout is a failure, never an
+activation success. Review traces as well as aggregate scores.
+
+To assert a live report with RSpec:
+
+```bash
+ASTRIA_ROUTING_REPORT=/tmp/astria-routing-codex/report.json rspec spec/routing_eval_spec.rb
+```
+
+These fixtures test routing and workflow execution, not rendering quality,
+production OAuth, actual attachment uploads, or the ChatGPT/Claude mobile UI.
+Preserve the directory's production review scenarios for those host checks.
+Release new skill packages and rescan/review updated MCP metadata through the
+normal directory process before claiming that published users receive the copy.

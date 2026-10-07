@@ -22,6 +22,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+      - name: Test routing graders and local MCP fixtures
+        run: |
+          gem install rspec --no-document
+          rspec spec/routing_eval_spec.rb
       - name: Test release tooling
         run: python3 -m unittest discover -s tests -v
       - name: Refresh generated plugins

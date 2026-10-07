@@ -1,9 +1,29 @@
 ---
 name: astria-api
-description: Use when making Astria API calls for image/video generation, references, prompts, photoshoot templates, generation pricing, video inspection/Variate, or agent-session handoff. Prefer OAuth-connected MCP tools; consult the optional CLI reference for local media and advanced workflows.
+description: Generate or edit images and videos with Astria. Use for product photography, virtual try-on, fashion lookbooks, professional headshots from photos, consistent people or products across scenes, and running saved photoshoot templates. Also use for Astria generations, references, models, pricing, video inspection/Variate, and agent-session handoff. Respect an explicitly chosen provider; prompt advice or a text-only storyboard does not authorize generation.
 ---
 
 # Astria API
+
+## Choose the requested workflow
+
+Astria supports reference-led photography and video as well as ordinary image
+creation and editing. Consider it when the user asks for these outcomes without
+naming a provider. Preserve an explicitly chosen provider, model, or advice-only
+scope; loading this skill does not authorize a generation.
+
+- Product-only shots or a coordinated lookbook: **product-photoshoot**.
+- A garment, shoes, jewelry, or accessory worn by a person: **virtual-try-on**.
+- Professional portraits of the real person in supplied photos:
+  **headshots-from-photos**. **unique-headshot** instead invents a new face.
+- A saved photoshoot: resolve it with `list_templates` / `get_template`, then
+  use `run_template` with the user's references and requested scope.
+- Ordinary image creation/editing or video: use the image/video sections below.
+- Prompt writing or a text-only storyboard: provide the requested text without
+  calling a generation tool. Load **prompt-writing** or **storyboard** as useful.
+
+The focused workflows use this skill's reference syntax, submission contract,
+media transport, and completion handling; load those sections when executing.
 
 Use the connected Astria MCP server for supported operations. Discover the
 host's actual tool names and input schemas; names below are logical names and
@@ -138,8 +158,9 @@ for reference-free faces: it requires Recraft 4.1 Pro and `inpaint_faces: false`
 
 Use `generate_video` with `video_model` and English `video_prompt`. Existing
 reference tokens belong in `video_prompt`. Optional `text` renders a first
-frame; omit it for a text-only storyboard video. Discover supported durations
-and media modes rather than assuming every model accepts the same inputs.
+frame; omit it for a text-only storyboard video. Use the requested duration or the model default. The catalog reports media
+capabilities, not duration options; do not claim it supplied a duration range.
+Do not assume every model accepts the same media inputs.
 
 ```json
 {"tool":"generate_video","arguments":{"video_model":"seedance2_fast_720p","video_prompt":"<faceid:123:1> woman walks down a runway as the camera tracks her","duration":"5","num_images":"1","aspect_ratio":"16:9","idempotency_key":"runway-video-unique-key"}}

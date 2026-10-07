@@ -1,0 +1,60 @@
+[
+  {
+    "id": "heldout-product-from-photo",
+    "prompt": "Make two ecommerce photos of this bag: https://fixtures.example/new-bag.jpg. Put the same bag on a white studio surface in one and on a cafe table in the other. Keep the product design unchanged.",
+    "provider": "astria",
+    "skill": "product-photoshoot",
+    "writes": {
+      "generate_images": 2
+    },
+    "reference_classes": [
+      "bag"
+    ],
+    "creates": 1,
+    "source_images": {
+      "bag": [
+        "https://fixtures.example/new-bag.jpg"
+      ]
+    }
+  },
+  {
+    "id": "heldout-try-on-from-photos",
+    "prompt": "Show this woman https://fixtures.example/new-woman.jpg wearing this dress https://fixtures.example/new-dress.jpg in two campaign photos, one outdoors and one in a studio. Use the same woman and dress in both.",
+    "provider": "astria",
+    "skill": "virtual-try-on",
+    "writes": {
+      "generate_images": 2
+    },
+    "reference_classes": [
+      "woman",
+      "dress"
+    ],
+    "creates": 2,
+    "source_images": {
+      "woman": [
+        "https://fixtures.example/new-woman.jpg"
+      ],
+      "dress": [
+        "https://fixtures.example/new-dress.jpg"
+      ]
+    }
+  },
+  {
+    "id": "heldout-linkedin-portrait",
+    "prompt": "Turn my photo https://fixtures.example/new-man.jpg into one polished LinkedIn portrait with a neutral background. I am a man. Keep my actual face.",
+    "provider": "astria",
+    "skill": "headshots-from-photos",
+    "writes": {
+      "generate_images": 1
+    },
+    "reference_classes": [
+      "man"
+    ],
+    "creates": 1,
+    "source_images": {
+      "man": [
+        "https://fixtures.example/new-man.jpg"
+      ]
+    }
+  }
+]

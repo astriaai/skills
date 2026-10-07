@@ -5,14 +5,14 @@
     "url": "https://www.astria.ai"
   },
   "metadata": {
-    "description": "Skills and OAuth-connected MCP tools for Astria generation, prompt writing and photoshoot templates.",
+    "description": "Reference-led product photography, virtual try-on, headshots, lookbooks, and image/video generation with Astria.",
     "version": "1.5.8"
   },
   "plugins": [
     {
       "name": "astria",
       "source": "./plugins/astria-claude",
-      "description": "Generate images and video, manage references and photoshoot templates through OAuth-connected Astria MCP. Includes optional CLI tools for local media and advanced workflows.",
+      "description": "Create product photos, virtual try-on images, fashion lookbooks, professional headshots from photos, and videos with Astria. Reuse people and product references across scenes or run saved photoshoot templates.",
       "version": "1.5.8",
       "category": "creative",
       "author": {
@@ -37,7 +37,10 @@
         "./skills/landing-page-editor",
         "./skills/store-photoshoot",
         "./skills/storyboard",
-        "./skills/artboard"
+        "./skills/artboard",
+        "./skills/product-photoshoot",
+        "./skills/virtual-try-on",
+        "./skills/headshots-from-photos"
       ]
     }
   ]
