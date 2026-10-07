@@ -122,6 +122,20 @@ RSpec.describe AstriaRoutingEval do
     end
   end
 
+  it 'uses a distinct ChatGPT registration without changing native names or the dedicated endpoint' do
+    root = File.expand_path('..', __dir__)
+    portable = JSON.parse(File.read(File.join(root, 'plugins/astria/plugin.json')))
+    expect(portable.fetch('name')).to eq('astria-mcp')
+    expect(portable.fetch('extensions').fetch('com.openai').fetch('interface').fetch('displayName')).to eq('Astria')
+    %w[plugins/astria/.codex-plugin/plugin.json plugins/astria-claude/.claude-plugin/plugin.json].each do |relative|
+      expect(JSON.parse(File.read(File.join(root, relative))).fetch('name')).to eq('astria')
+    end
+    %w[plugins/astria/mcp.json plugins/astria/.mcp.json plugins/astria-claude/.mcp.json].each do |relative|
+      config = JSON.parse(File.read(File.join(root, relative)))
+      expect(config.fetch('mcpServers').fetch('astria').fetch('url')).to eq('https://mcp.astria.ai/mcp')
+    end
+  end
+
   if ENV['ASTRIA_ROUTING_REPORT']
     report = JSON.parse(File.read(ENV.fetch('ASTRIA_ROUTING_REPORT')))
     report.fetch('cases').each do |result|

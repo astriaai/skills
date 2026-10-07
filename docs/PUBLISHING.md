@@ -41,6 +41,13 @@ Claude `.mcp.json` and both native package MCP configurations.
 
 ## Distribution and upgrades
 
+OpenAI pins a registered MCP app's URL and an existing plugin's MCP server set.
+The API-host draft cannot be retargeted and the legacy skills-only plugin cannot
+add MCP. The portable ChatGPT package therefore uses `astria-mcp` for a new
+registration at `https://mcp.astria.ai/mcp`, keeping the public display name Astria.
+Codex and Claude Code keep their `astria` marketplace identifiers. All packages
+use the dedicated hostname; do not restore the old API URL to satisfy a draft.
+
 - Codex developers can install this repository marketplace and reinstall the
   `astria@astria` plugin after local changes. The local skills remain live
   symlinks, so new tasks immediately use the edited source.
@@ -78,6 +85,14 @@ MCP workflows need no local Python/curl installation or CLI API key; optional
 terminal workflows retain separate CLI authentication.
 
 ## Claude directory
+
+Claude Code marketplace distribution is separate from public directory approval.
+Anthropic's [Software Directory Policy](https://support.claude.com/en/articles/13145358-anthropic-software-directory-policy),
+section 4.B, excludes standalone AI image/video/audio generation unless Anthropic
+expressly permits it in writing. The connector form requires a declaration that
+it does not generate AI media. Astria cannot truthfully make that declaration;
+obtain written permission before submitting either public directory listing.
+Do not change descriptions or attestations to conceal the generation capability.
 
 The Claude marketplace entry uses `plugins/astria-claude`; canonical skills
 remain at the repository root. Sync generates both packages. Build a separate

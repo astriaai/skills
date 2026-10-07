@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "astria",
+  "name": "astria-mcp",
   "version": "1.5.10",
   "description": "Create product photos, virtual try-on images, fashion lookbooks, professional headshots from photos, and videos with Astria. Reuse people and product references across scenes or run saved photoshoot templates.",
   "author": {
