@@ -36,7 +36,12 @@ def main():
             info = zipfile.ZipInfo(relative, date_time=(2020, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = (path.stat().st_mode & 0xFFFF) << 16
-            bundle.writestr(info, path.read_bytes())
+            payload = path.read_bytes()
+            if args.target == "openai" and relative == "plugin.json":
+                metadata = json.loads(payload)
+                metadata["name"] = "astria-mcp"
+                payload = (json.dumps(metadata, indent=2) + "\n").encode("utf-8")
+            bundle.writestr(info, payload)
 
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     checksum = archive.with_suffix(archive.suffix + ".sha256")

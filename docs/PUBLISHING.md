@@ -45,7 +45,8 @@ OpenAI pins a registered MCP app's URL and an existing plugin's MCP server set.
 The API-host draft cannot be retargeted and the legacy skills-only plugin cannot
 add MCP. The portable ChatGPT package therefore uses `astria-mcp` for a new
 registration at `https://mcp.astria.ai/mcp`, keeping the public display name Astria.
-Codex and Claude Code keep their `astria` marketplace identifiers. All packages
+The archive builder assigns this identifier only to the ChatGPT upload ZIP.
+Codex and Claude Code source manifests keep their `astria` marketplace identifiers. All packages
 use the dedicated hostname; do not restore the old API URL to satisfy a draft.
 
 - Codex developers can install this repository marketplace and reinstall the

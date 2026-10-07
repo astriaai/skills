@@ -92,7 +92,7 @@ def main():
         require(version == args.expected_version, f"expected {args.expected_version}, found {version}")
 
     require(portable["$schema"] == "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", "invalid portable schema")
-    require(portable["name"] == "astria-mcp", "ChatGPT dedicated-host registration must use astria-mcp")
+    require(portable["name"] == "astria", "marketplace source manifest must use astria")
     require({codex["name"], claude["name"]} == {"astria"}, "native marketplace names must remain astria")
     require(codex["skills"] == "./skills/", "Codex manifest must load ./skills/")
     interface = portable["extensions"]["com.openai"]["interface"]
