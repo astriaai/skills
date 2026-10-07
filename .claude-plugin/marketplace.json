@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Reference-led product photography, virtual try-on, headshots, lookbooks, and image/video generation with Astria.",
-    "version": "1.5.8"
+    "version": "1.5.9"
   },
   "plugins": [
     {
       "name": "astria",
       "source": "./plugins/astria-claude",
       "description": "Create product photos, virtual try-on images, fashion lookbooks, professional headshots from photos, and videos with Astria. Reuse people and product references across scenes or run saved photoshoot templates.",
-      "version": "1.5.8",
+      "version": "1.5.9",
       "category": "creative",
       "author": {
         "name": "Astria",
