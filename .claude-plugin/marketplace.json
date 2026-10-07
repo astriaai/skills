@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Skills and OAuth-connected MCP tools for Astria generation, prompt writing and photoshoot templates.",
-    "version": "1.5.7"
+    "version": "1.5.8"
   },
   "plugins": [
     {
       "name": "astria",
       "source": "./",
       "description": "Generate images and video, manage references and photoshoot templates through OAuth-connected Astria MCP. Includes optional CLI tools for local media and advanced workflows.",
-      "version": "1.5.7",
+      "version": "1.5.8",
       "category": "creative",
       "author": {
         "name": "Astria",

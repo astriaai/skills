@@ -1,7 +1,7 @@
 {
   "name": "astria",
   "description": "Generate images and video, manage references and photoshoot templates through OAuth-connected Astria MCP. Includes optional CLI tools for local media and advanced workflows.",
-  "version": "1.5.7",
+  "version": "1.5.8",
   "author": {
     "name": "Astria",
     "url": "https://www.astria.ai"
