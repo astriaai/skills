@@ -2,7 +2,7 @@
 
 [Astria](https://www.astria.ai) skills and OAuth-connected MCP tools for image
 and video generation, references, prompt writing and photoshoot templates.
-The plugin connects to `https://api.astria.ai/mcp`. Your agent host handles
+The plugin connects to `https://mcp.astria.ai/mcp`. Your agent host handles
 Astria login and keeps the connection authenticated.
 
 ## Install in Codex
@@ -46,7 +46,7 @@ npx skills add astriaai/skills
 ```
 
 This installs skill instructions; it does not configure an MCP connection.
-Add `https://api.astria.ai/mcp` in the agent's MCP settings and complete its
+Add `https://mcp.astria.ai/mcp` in the agent's MCP settings and complete its
 OAuth login. Hosts supporting DCR register their client automatically. The skills use discovered
 tool names and schemas rather than assuming one agent's namespace.
 

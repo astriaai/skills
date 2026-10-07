@@ -3,7 +3,7 @@
   "mcpServers": {
     "astria": {
       "type": "streamable-http",
-      "url": "https://api.astria.ai/mcp"
+      "url": "https://mcp.astria.ai/mcp"
     }
   }
 }

@@ -13,7 +13,7 @@ the CLI and are authoritative for accepted parameters.
 
 ## Connection and transport
 
-The plugin declares `https://api.astria.ai/mcp`. Compatible hosts register
+The plugin declares `https://mcp.astria.ai/mcp`. Compatible hosts register
 their public OAuth client automatically through DCR. The host handles OAuth login,
 credential storage and refresh. If authentication is required, direct the user
 to the host's Astria connection/login flow; do not ask for API keys or read
