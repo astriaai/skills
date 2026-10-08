@@ -12,6 +12,11 @@ Create a text-only cinematic storyboard from the current draft and references.
 Never generate a 4x4 artboard, storyboard image, contact sheet, or first-frame
 image.
 
+Use the **storyboard** model-selection rule: preserve an explicit user choice;
+otherwise use the first Featured video model, currently Seedance 2.5 720p
+(`seedance25_720p`). Do not ask the user to choose a video model or preserve
+an automatically populated model over this default.
+
 Write 16 numbered cinematic shots, varying camera scale and angle while keeping
 the same references, subject, wardrobe, location, lighting, and grade. Preserve
 every `<lora:...>` and `<faceid:...>` token exactly. Give each shot one filmable

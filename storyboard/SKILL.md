@@ -72,11 +72,13 @@ request. Use **astria-api** for the connected MCP transport.
 
 Choose the video model from `list_models` before preparing the draft:
 
-- Preserve an explicit video model already selected in the current draft.
-- Otherwise, reuse the Seedance 2.5 or Seedance 2 model and resolution established
-  by the user's prior videos.
-- If prior videos do not establish either default, ask the user to choose between
-  Seedance 2.5 and Seedance 2. Do not silently use the composer's global default.
+- Preserve a video model only when the user explicitly selected it.
+- Otherwise, use the first model in the composer's **Featured** video group:
+  currently **Seedance 2.5 720p** (`seedance25_720p`). When featured ordering is
+  unavailable in the host, use `seedance25_720p` from `list_models`.
+- Do not ask the user to choose between Seedance 2.5 and Seedance 2. Prior videos
+  and an automatically populated draft or catalog default do not override the
+  featured default.
 
 Call `present_generation` exactly once with the complete current generation
 draft. Put the completed sequence in `video_prompt`, set `text` to the empty
@@ -84,7 +86,7 @@ string, discard all `pose` tune references, and preserve the remaining fields
 from Current generation draft JSON, including the ordered
 `image_reference_urls` array. Set `video_duration` to `15` unless the user
 explicitly requested another supported duration. Set `video_model` to the
-explicit, established, or user-selected model from the rules above. This writes
+explicitly user-selected model or the featured default from the rules above. This writes
 the sequence directly to video mode with no image/first-frame prompt. Do not
 repeat the storyboard in assistant text.
 
