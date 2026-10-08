@@ -1,16 +1,27 @@
 ---
 name: unique-headshot
-description: Use when generating unique AI headshot/model faces without a reference tune. Creates diverse, realistic casting-style headshots with detailed facial trait descriptions.
+description: Generate new, unique AI headshot/model faces from text, including a similar vibe inspired by an attached person photo. Describe visible traits; never use the photo or a reference tune in generation. Portraits preserving the actual person use headshots-from-photos.
 ---
 
 # Unique Headshot Generator
 
-Generate realistic, unique face headshots for AI model creation. No reference tune needed — the prompt itself defines the face through detailed physical trait descriptions.
+Generate realistic, unique face headshots for AI model creation. The prompt alone defines a new person through detailed physical trait descriptions.
+
+## Attached photos are inspiration only
+
+**NEVER send a reference image to generation in this skill**, even when the user attaches a person photo or the composer already contains a reference. Do not create or reuse a subject tune, add `<faceid:...>` / `<lora:...>` tokens, edit the attached image, or pass its URL/path as any generation media input. This includes `references`, `input_image`, `mask_image`, raw image references, and their UI/CLI equivalents.
+
+When a person photo is attached:
+1. View it and describe the visible characteristics that make the headshot distinctive: skin tone and texture, eye shape and color, eyebrows, nose, lips, face shape, cheekbones, jaw, hair color and texture, expression, and overall casting vibe. Describe only what you can see; do not infer ethnicity or heritage from appearance.
+2. Give a brief trait description and turn it into a self-contained English headshot prompt for a **new person with a similar vibe**. Carry the distinctive visual traits into words rather than writing "the attached person" or "use this reference". Apply the headshot framing, pulled-back hair, background, and lighting below.
+3. Generate from that text alone. The attachment is for visual analysis only; never upload it, train it, or bind it to the generation. Do not use reference-removing inspection such as `astria inspect --name woman`, which would erase the facial characteristics you need to describe.
+
+Without an attachment, invent the traits from the user's brief. If the user wants portraits of the actual person with their identity preserved, use **headshots-from-photos** instead; do not turn unique-headshot into a reference-based workflow.
 
 ## Prompt Template
 
 ```
-Close-up studio headshot of a [age]-year-old [ethnicity/heritage] [gender] with [skin_tone] skin, [skin_details], [eye_description], [nose_description], [face_structure], [unique_feature], [hair_description]. Bare shoulders, no clothing visible, no jewelry. [expression], looking at the camera. Clean white background #fff, [lighting], fine natural skin texture and an even, unmarked complexion, beauty headshot
+Close-up studio headshot of a [age]-year-old [optional user-specified ethnicity/heritage] [gender] with [skin_tone] skin, [skin_details], [eye_description], [nose_description], [face_structure], [unique_feature], [hair_description]. Bare shoulders, no clothing visible, no jewelry. [expression], looking at the camera. Clean white background #fff, [lighting], fine natural skin texture and an even, unmarked complexion, beauty headshot
 ```
 
 ## Slot Definitions
@@ -20,17 +31,10 @@ Close-up studio headshot of a [age]-year-old [ethnicity/heritage] [gender] with 
 - Always specify exact age (e.g., "22-year-old")
 
 ### Ethnicity / Heritage
-Describe a specific heritage because it guides realistic facial features — it is a
-casting choice, never a default. Rules:
-- **Derive it from what is asked or seen.** When the brief comes from a brand's own
-  photos, read the heritage off the visible skin tone, hair and features. Never infer
-  it from the brand's country, language, store name or currency: an Israeli shoe store,
-  a French label or a Japanese marketplace does not make its models Israeli, French or
-  Japanese.
-- **No house default.** With no visual or written cue, spread a batch across regions
-  (East Asia, South Asia, Southeast Asia, West/East/Southern Africa, North Africa and
-  the Middle East, Northern/Southern/Eastern Europe, Latin America, Indigenous and
-  mixed heritage) and never repeat a region within the batch.
+Heritage is an optional casting choice, not something to infer from a photo.
+- Include it when the user specifies it. For photo-inspired faces, describe visible skin tone, hair, and facial geometry instead of guessing heritage.
+- Never infer heritage from a brand's country, language, store name, or currency.
+- For an unconstrained invented batch, vary casting backgrounds and visible traits across regions rather than applying a house default. For a photo-inspired batch, keep the requested vibe while varying facial geometry and expression.
 - Single origin: "Nigerian", "Korean", "Irish", "Mexican", "Filipina", "Norwegian",
   "Egyptian", "Peruvian", "Punjabi", "Vietnamese"
 - Hyphenated heritage: "Brazilian-Japanese", "Ghanaian-British", "Lebanese-Italian",
@@ -111,11 +115,10 @@ Vary lighting for natural diversity:
 
 ## Generation Rules
 
-1. **No reference tunes** — these prompts generate entirely new faces (no `<faceid:...>` tokens)
-2. **Always generate with Recraft 4.1 Pro**. Before generating, call `list_models` through the connected MCP server (see **astria-api**) and resolve the current Recraft 4.1 Pro entry by its name/title (the catalog may expose a model name such as `recraft-4-1` or a display title such as `Recraft V4.1`). Never hard-code or infer a numeric tune ID, never use the composer default, and never silently substitute another model. Use the discovered tune ID as `generate_images.model` — its detailed skin rendering suits beauty headshots.
-3. **Disable face inpainting for every headshot**. Call `generate_images` with the discovered model ID, English `text`, `num_images: "2"` (unless another count was requested), `aspect_ratio: "1:1"`, `inpaint_faces: false`, and a fresh `idempotency_key`. Send `false` explicitly; never rely on defaults. Recraft has no `resolution` setting. In a CLI-only Astria sandbox, use `astria generate --model <resolved-id> --text "<headshot prompt>" --num-images 2 --aspect-ratio 1:1 --no-inpaint-faces`. If the embedded chat exposes `present_generation`, preserve the same resolved model ID and `inpaint_faces: false` in that draft.
-4. **Never repeat the same ethnicity/heritage** in a batch, and never lean on one
-   region across batches — check your last few prompts and move on
+1. **Text-only generation, always**. No subject reference tunes or tokens, image editing, or generation media inputs. Remove inherited subject tokens, image-input CLI flags, media fields, and replacement lineage from a composer draft: this is a new face, not an edit of the source person. An existing attachment never changes this rule.
+2. **Use Recraft 4.1 Pro**. Resolve its current name/title and tune ID with `list_models` through the connected MCP server (see **astria-api**), or `astria models` in the CLI-only embedded sandbox. The catalog may call it `recraft-4-1` / `Recraft V4.1`. Never hard-code or infer a numeric tune ID or silently use the composer default. For an embedded draft, also check that the resolved ID is available in the current image model contract; catalog availability alone does not prove composer support. If unavailable, report the limitation instead of substituting another model.
+3. **Validate embedded drafts before presenting or generating**. When `validate_generation` is available, call it with the exact complete `schema_version: 2`, `prompts` collection intended for `present_generation`. Use the resolved integer `tune_id`, English `text`, integer `num_images: 2` unless another count was requested, `aspect_ratio: "1:1"`, `resolution: null`, `image_reference_urls: []`, and null for every image input, mask, video, and source-media field. Leave replacement lineage null. Do not copy a resolution or image input from the current composer. Fix all reported errors using `allowed_values` and repair instructions, then validate the revised collection before proceeding. Never repair a unique-headshot by attaching images, creating reference tunes, or adding subject tokens. `valid: null` is not a pass: obtain the current composer/model contract; if settings remain unavailable, report that limitation. Present only the validated collection, without subsequent changes. The validator checks draft settings; it does not guarantee file availability, permissions, or successful submission.
+4. **Disable face inpainting**. For MCP `generate_images`, send the discovered model ID, English `text`, `num_images: "2"` unless another count was requested, `aspect_ratio: "1:1"`, `inpaint_faces: false`, and a fresh `idempotency_key`. Omit `resolution` and every reference/media argument. In a CLI-only sandbox use `astria generate --model <resolved-model> --text "<headshot prompt>" --num-images 2 --aspect-ratio 1:1 --no-inpaint-faces`, with no image/reference flags. Embedded tools share a draft schema, not the MCP generation schema: include `inpaint_faces: false` only if their live schema exposes it; never invent unsupported arguments. Otherwise use Recraft's disabled face-inpainting default for the card, and explicitly disable it on direct submission. An embedded validation failure must be repaired before direct CLI generation; do not bypass it by submitting through another route.
 5. **Every prompt must have at least one unique distinguishing feature** in facial geometry or expression (dimple, brow shape, asymmetric smile, cupid's bow, etc.). Do not use a skin mark to satisfy this rule. Unless the user requests one, omit moles, beauty marks, freckles, and other localized pigmentation from the prompt. Describe natural texture with pores or sheen without implying pigmented spots. If a skin marking is explicitly requested, adapt the default suffix to accommodate it.
 6. **Hair is always pulled back** — no hair framing or covering the face
 7. **Default suffix**: `Bare shoulders, no clothing visible, no jewelry. [expression], looking at the camera. Clean white background #fff, [lighting], fine natural skin texture and an even, unmarked complexion, beauty headshot`
@@ -131,8 +134,8 @@ the example ID and key; do not copy them into a live request):
 ## Batch Generation
 
 When generating multiple unique headshots, maximize diversity:
-- Vary ethnicity, skin tone, eye color, face shape, and unique features across the batch
-- Alternate between single-origin and mixed-heritage backgrounds
+- For unconstrained casting, vary heritage, skin tone, eye color, face shape, and unique features across the batch
+- For attached-photo inspiration, preserve the described vibe and vary facial geometry or expression; do not override the brief merely to diversify heritage
 - Mix age range (don't make them all the same age)
 - Vary expressions and lighting setups
 - Each face should be immediately distinguishable from the others
