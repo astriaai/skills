@@ -30,9 +30,22 @@ the storyboard or use its reference image for the video. This applies even when
 copying an otherwise completed prompt verbatim. Do not remove ordinary prose
 that describes a subject's pose, stance, or movement.
 
-Preserve every other `<lora:...>` and `<faceid:...>` token exactly. Keep the
-same character, products, wardrobe, location, time of day, lighting, and grade
-throughout the sequence unless the requested story deliberately changes one.
+Preserve every other `<lora:...>` and `<faceid:...>` token exactly. Existing
+tunes are supported directly in `video_prompt`, including Seedance 2.5:
+`<faceid:123:1> woman wearing <faceid:456:1> dress`. Keep the tune's class name
+immediately after its token. If the draft identifies selected tunes by ID or
+metadata rather than prompt tokens, use their actual IDs, model types and class
+names to write the corresponding mentions; use `get_reference` when needed.
+
+Astria resolves these tune mentions and supplies their reference images to the
+video model. Do not replace tune tokens with training-image URLs, copy tune
+images into `image_reference_urls` / `image_references`, or create duplicate
+tunes. A video tool need not expose a separate tune-ID argument: the mentions
+in `video_prompt` select the tunes. Never claim video mode only accepts image
+URLs or that tune tokens work only for image generation.
+
+Keep the same character, products, wardrobe, location, time of day, lighting,
+and grade throughout the sequence unless the requested story changes one.
 Preserve every raw image reference exactly and in the same order. Do not turn
 raw references into tunes or embed their URLs in the storyboard text. A raw
 reference may be a public HTTP(S) URL or an absolute `/workspace/...` path from
@@ -117,9 +130,11 @@ duration:
 
 Call `generate_video` with the chosen catalog `video_model`, the exact
 `video_prompt`, `duration: "15"`, `num_images: "1"`, the current aspect ratio
-when available, and a fresh `idempotency_key`. Include `image_references` as
-an array of HTTPS URLs in the original order; omit it if no raw references
-exist. For local paths, obtain real uploaded URLs or use the optional CLI
+when available, and a fresh `idempotency_key`. Keep existing tune mentions
+in `video_prompt`; do not also attach their training images. Include
+`image_references` only for raw images supplied separately from tunes, as an
+array of HTTPS URLs in the original order. Omit it for a tune-only storyboard.
+For local raw-image paths, obtain real uploaded URLs or use the optional CLI
 workflow in **astria-api**. Do not rewrite local paths into invented URLs.
 
 Replace `"15"` only when the user requested another supported duration. Raw

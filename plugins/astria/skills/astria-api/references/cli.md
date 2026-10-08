@@ -191,7 +191,7 @@ from `--text`, then the video model animates it from `--video-prompt`.
 
 ```bash
 # Existing reference: use the same token + tune-name syntax as image generation.
-# Put Seedance 2 references in --video-prompt so their images condition the video.
+# Put Seedance 2 / 2.5 references in --video-prompt so their images condition the video.
 astria video --video-model seedance2_fast_720p \
   --video-prompt "<faceid:1234:1> woman walks down a runway as the camera tracks her" \
   --duration 5 --aspect-ratio 16:9 --wait
@@ -213,11 +213,13 @@ astria video --text "zwx man <faceid:123:1> in a dance arena" \
   --duration 10 --input-video ./reference.mp4
 ```
 
-- Seedance 2 references use `<faceid:TUNE_ID:1> TUNE_NAME`, exactly like image
+- Seedance 2 and 2.5 references use `<faceid:TUNE_ID:1> TUNE_NAME`, exactly like image
   prompts. The tune's class name must immediately follow the token. A bare
   `<faceid:1234:1>` token is incomplete.
-- Put existing reference mentions in `--video-prompt`; Seedance 2 resolves the
-  referenced tunes' images and sends them as video reference images.
+- Put existing reference mentions in `--video-prompt`; Seedance 2 and 2.5
+  resolve the referenced tunes' images and send them as video reference images.
+  Do not replace tune mentions with `--image-reference` training-image URLs;
+  no separate tune-ID flag is needed for existing references.
 - `--reference NAME=PATH_OR_URL` creates an instant `faceid` reference and
   prepends `<faceid:NEW_ID:1> NAME` to both `--text` (when present) and
   `--video-prompt`. Repeat it for multiple references. `--images` is an alias.

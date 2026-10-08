@@ -156,9 +156,17 @@ for reference-free faces: it requires Recraft 4.1 Pro and `inpaint_faces: false`
 
 ## Video
 
-Use `generate_video` with `video_model` and English `video_prompt`. Existing
-reference tokens belong in `video_prompt`. Optional `text` renders a first
-frame; omit it for a text-only storyboard video. Use the requested duration or the model default. The catalog reports media
+Use `generate_video` with `video_model` and English `video_prompt`. Seedance
+2 and 2.5 support existing tunes directly in `video_prompt`, using the same
+`<faceid:TUNE_ID:1> CLASS_NAME` or `<lora:...>` syntax as image prompts. Astria
+resolves the referenced tunes and supplies their images to the video model;
+keep these mentions even when no separate tune-ID argument exists. Do not
+claim tune tokens are image-only or that video mode only accepts image URLs.
+Do not replace existing tunes with training-image URLs or attach those images
+again through `image_references`.
+
+Optional `text` renders a first frame; omit it for a text-only storyboard video.
+Use the requested duration or the model default. The catalog reports media
 capabilities, not duration options; do not claim it supplied a duration range.
 Do not assume every model accepts the same media inputs.
 
@@ -166,8 +174,10 @@ Do not assume every model accepts the same media inputs.
 {"tool":"generate_video","arguments":{"video_model":"seedance2_fast_720p","video_prompt":"<faceid:123:1> woman walks down a runway as the camera tracks her","duration":"5","num_images":"1","aspect_ratio":"16:9","idempotency_key":"runway-video-unique-key"}}
 ```
 
-`image_references` attaches ordered raw HTTPS images without making tunes;
-preserve their order. `references` creates named tune references. `first_frame`,
+`image_references` attaches separately supplied raw HTTPS images without
+making tunes; preserve their order and omit it when using only existing tunes.
+`references` creates new named tune references; existing tunes need only their
+mentions in `video_prompt`. `first_frame`,
 `last_frame`, `input_video` and `audio_reference` take HTTPS URLs. Motion-control
 models require `input_video`; `generate_audio` explicitly enables/disables audio.
 Rendered video assets can be in `images[]` with `content_type=video/mp4`.

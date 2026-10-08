@@ -22,6 +22,13 @@ the same references, subject, wardrobe, location, lighting, and grade. Preserve
 every `<lora:...>` and `<faceid:...>` token exactly. Give each shot one filmable
 action and do not repeat a camera scale twice in a row.
 
+Use existing tunes directly in `video_prompt` as `<faceid:ID:1> CLASS_NAME`
+(or their actual `<lora:...>` mention), following **storyboard**. Video mode,
+including Seedance 2.5, supports these tokens; Astria resolves their images.
+Do not replace tunes with their training-image URLs or put those images in
+`image_references`. Use that array only for separately supplied raw images;
+omit it when all references are tunes.
+
 Follow the **storyboard** skill for host-specific presentation: use
 `present_generation` only when Astria exposes it; otherwise show the English
 storyboard text for review. Clear image prompt text in the Astria draft and
