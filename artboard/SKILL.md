@@ -26,16 +26,19 @@ Use existing tunes directly in `video_prompt` as `<faceid:ID:1> CLASS_NAME`
 (or their actual `<lora:...>` mention), following **storyboard**. Video mode,
 including Seedance 2.5, supports these tokens; Astria resolves their images.
 Do not replace tunes with their training-image URLs or put those images in
-`image_references`. Use that array only for separately supplied raw images;
-omit it when all references are tunes.
+`image_references`. Tune tokens represent ingredients such as products,
+packshots, people and wardrobe. Use `image_references` for ordered generated
+scene images that compose into a full short film; omit it when there are no
+scene images. The same film may use both ingredient tunes and scene images.
 
 Follow the **storyboard** skill for host-specific presentation: use
 `present_generation` only when Astria exposes it; otherwise show the English
 storyboard text for review. Clear image prompt text in the Astria draft and
-preserve ordered raw references. Do not generate for a planning request.
+preserve ordered generated scene references. Do not generate for a planning
+request.
 
 When explicitly asked to generate, use the connected `generate_video` MCP tool
 (see **astria-api**) with the exact approved `video_prompt`, chosen
 `video_model`, supported duration and a fresh idempotency key. Omit `text`.
-Pass raw HTTPS references as the ordered `image_references` array. For local
-files, follow **astria-api**'s upload/optional CLI guidance.
+Pass generated scene images as the ordered HTTPS `image_references` array.
+For local scene-image files, follow **astria-api**'s upload/optional CLI guidance.

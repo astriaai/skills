@@ -174,11 +174,18 @@ Do not assume every model accepts the same media inputs.
 {"tool":"generate_video","arguments":{"video_model":"seedance2_fast_720p","video_prompt":"<faceid:123:1> woman walks down a runway as the camera tracks her","duration":"5","num_images":"1","aspect_ratio":"16:9","idempotency_key":"runway-video-unique-key"}}
 ```
 
-`image_references` attaches separately supplied raw HTTPS images without
-making tunes; preserve their order and omit it when using only existing tunes.
-`references` creates new named tune references; existing tunes need only their
-mentions in `video_prompt`. `first_frame`,
-`last_frame`, `input_video` and `audio_reference` take HTTPS URLs. Motion-control
+For storyboard and short-film workflows, choose references by role:
+
+- Products, packshots, people, garments and other ingredients use tune mentions
+  in `video_prompt`. Resolve existing tunes; `references` creates new named
+  ingredient tunes when needed.
+- Multiple generated scene images use `image_references` as ordered HTTPS URLs
+  to compose those scenes into the full short film. Preserve the intended scene
+  order; do not create tunes for these scene images.
+
+Both roles may coexist in one request. Omit `image_references` when no scene
+images are supplied; ingredients are not sequential scene waypoints.
+`first_frame`, `last_frame`, `input_video` and `audio_reference` take HTTPS URLs. Motion-control
 models require `input_video`; `generate_audio` explicitly enables/disables audio.
 Rendered video assets can be in `images[]` with `content_type=video/mp4`.
 

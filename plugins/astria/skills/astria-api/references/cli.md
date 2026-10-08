@@ -202,10 +202,10 @@ astria video --video-model seedance2_fast_720p \
   --reference woman=./model.jpg --reference dress=https://example.com/dress.jpg \
   --duration 5 --aspect-ratio 16:9 --wait
 
-# Ordered raw references: attach the images directly without creating tunes.
+# Generated scenes: compose their images into a short film without making tunes.
 astria video --video-model seedance2_fast_720p \
-  --video-prompt "transition through these looks in order" \
-  --image-reference ./look-1.jpg --image-reference ./look-2.jpg \
+  --video-prompt "connect these generated scenes into a short film in order" \
+  --image-reference ./scene-1.jpg --image-reference ./scene-2.jpg \
   --duration 15 --aspect-ratio 16:9 --wait
 
 astria video --text "zwx man <faceid:123:1> in a dance arena" \
@@ -223,9 +223,11 @@ astria video --text "zwx man <faceid:123:1> in a dance arena" \
 - `--reference NAME=PATH_OR_URL` creates an instant `faceid` reference and
   prepends `<faceid:NEW_ID:1> NAME` to both `--text` (when present) and
   `--video-prompt`. Repeat it for multiple references. `--images` is an alias.
-- `--image-reference PATH_OR_URL` attaches a raw image directly to the video
-  prompt without creating a tune. Repeat it in storyboard order. Use either
-  all local files or all URLs in one request so that ordering remains exact.
+- Use tune mentions for ingredients such as products, packshots, people and
+  garments. Use repeated `--image-reference PATH_OR_URL` for generated scene
+  images being composed into a full short film, in intended scene order;
+  do not create tunes for those scenes. Both roles may coexist in one video.
+  Use either all local scene files or all URLs so ordering remains exact.
 - `--first-frame` / `--last-frame` / `--input-video` accept a URL or local file.
 - Motion-control models (`*_motion_control*`, `wan_animate_*`, `dreamactor_m2`,
   `happyhorse_motion_control`) require `--input-video`.
@@ -480,9 +482,10 @@ astria api PATCH /prompts/7001 --query view=board --data '{"prompt":{"pack_id":8
 astria api PATCH /prompts/7001 --query view=board --data '{"prompt":{"pack_id":null,"base_pack_id":88}}'
 ```
 
-For an ordered raw-image video, pass the selected images directly with repeated
-`astria video --image-reference PATH_OR_URL` options. Do not create temporary
-tunes for those images.
+To compose selected generated scene images into a full short film, pass them
+in scene order with repeated `astria video --image-reference PATH_OR_URL`
+options. Do not create temporary tunes for these scenes; use tune tokens for
+products/packshots and other ingredients that appear within them.
 
 ## Workspaces & landing pages
 

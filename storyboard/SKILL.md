@@ -19,8 +19,8 @@ reference tokens exactly.
 
 Read the current image prompt, reference tokens, aspect ratio, and any existing
 video prompt from page context. Also read `image_reference_urls` as an ordered
-sequence of raw visual waypoints. Treat a handoff such as "Turn this into a
-cinematic scene" as permission to make the missing creative choices when the
+sequence of generated scene images to compose into a full short film. Treat a
+handoff such as "Turn this into a cinematic scene" as permission to make the missing creative choices when the
 draft already contains a reference, scene, and general idea of the frame. Do
 not ask the user to repeat those details.
 
@@ -29,6 +29,18 @@ Discard every reference whose tune `name` is `pose`, including its complete
 the storyboard or use its reference image for the video. This applies even when
 copying an otherwise completed prompt verbatim. Do not remove ordinary prose
 that describes a subject's pose, stance, or movement.
+
+Choose references by their role:
+
+- **Ingredients:** people, products, garments, packshots, accessories, and other
+  subjects to combine within scenes use tune tokens in `video_prompt`.
+- **Scenes:** multiple generated images depicting composed scenes use ordered
+  `image_reference_urls` in the composer / `image_references` in MCP to build
+  the full short film. Describe motion and transitions through those scenes.
+
+Both can be used in one film: tune tokens keep ingredients consistent while
+scene images define the sequence. A dress packshot and a person's face are
+ingredients, not successive scene waypoints.
 
 Preserve every other `<lora:...>` and `<faceid:...>` token exactly. Existing
 tunes are supported directly in `video_prompt`, including Seedance 2.5:
@@ -46,10 +58,10 @@ URLs or that tune tokens work only for image generation.
 
 Keep the same character, products, wardrobe, location, time of day, lighting,
 and grade throughout the sequence unless the requested story changes one.
-Preserve every raw image reference exactly and in the same order. Do not turn
-raw references into tunes or embed their URLs in the storyboard text. A raw
-reference may be a public HTTP(S) URL or an absolute `/workspace/...` path from
-an attached file; keep either form unchanged and never rewrite a workspace path
+Preserve every scene image reference exactly and in the same order. Do not
+turn these generated scene images into tunes or embed their URLs in the
+storyboard text. A scene image reference may be a public HTTP(S) URL or an
+absolute `/workspace/...` path from an attached file; keep either form unchanged and never rewrite a workspace path
 as `file://` or invent a public URL for it.
 
 ## Write the storyboard
@@ -69,9 +81,9 @@ requests another supported duration:
   them continuous.
 - Use the identical reference token whenever its subject appears. Chain
   continuity with phrases such as "the same woman", "she", and "her".
-- When ordered raw image references are present, make the action progress from
-  reference 1 through the final reference in order, describing filmable visual
-  transitions between them rather than treating them as unrelated examples.
+- When ordered generated scene images are present, make the action progress
+  from scene 1 through the final scene in order, describing filmable motion
+  and transitions that connect them into a full short film.
 
 Write only the numbered shots in the finished video prompt. Do not add a grid
 header or describe storyboard tiles.
@@ -96,7 +108,7 @@ Choose the video model from `list_models` before preparing the draft:
 Call `present_generation` exactly once with the complete current generation
 draft. Put the completed sequence in `video_prompt`, set `text` to the empty
 string, discard all `pose` tune references, and preserve the remaining fields
-from Current generation draft JSON, including the ordered
+from Current generation draft JSON, including the ordered generated scene
 `image_reference_urls` array. Set `video_duration` to `15` unless the user
 explicitly requested another supported duration. Set `video_model` to the
 explicitly user-selected model or the featured default from the rules above. This writes
@@ -132,11 +144,12 @@ Call `generate_video` with the chosen catalog `video_model`, the exact
 `video_prompt`, `duration: "15"`, `num_images: "1"`, the current aspect ratio
 when available, and a fresh `idempotency_key`. Keep existing tune mentions
 in `video_prompt`; do not also attach their training images. Include
-`image_references` only for raw images supplied separately from tunes, as an
-array of HTTPS URLs in the original order. Omit it for a tune-only storyboard.
-For local raw-image paths, obtain real uploaded URLs or use the optional CLI
-workflow in **astria-api**. Do not rewrite local paths into invented URLs.
+`image_references` for the generated scene images being composed into the film,
+as an array of HTTPS URLs in the intended scene order. Use tune tokens for
+products/packshots and other ingredients. Omit the array when there are no
+scene images. For local scene-image paths, obtain real uploaded URLs or use
+the optional CLI workflow in **astria-api**. Do not rewrite local paths into invented URLs.
 
-Replace `"15"` only when the user requested another supported duration. Raw
-image waypoints are not first-frame prompts. Do not create or pass an artboard
+Replace `"15"` only when the user requested another supported duration. Generated
+scene waypoints are not first-frame prompts. Do not create or pass an artboard
 image or an image/first-frame prompt unless the user asks for one.
