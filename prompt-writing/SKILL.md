@@ -38,8 +38,15 @@ through `generate_images` with a fresh idempotency key (see **astria-api**).
 
 # Prompt Writing Guide
 
-Use the default image model returned by **`list_models`**, unless the user
-selected another model or the specialized skill requires one.
+Use the default image model and `model_selection_guidance` returned by
+**`list_models`**, unless the user explicitly requests another model or the
+specialized skill requires one. Avoid legacy Flux.1 for image generation and
+editing unless the user explicitly requests Flux.1. Do not infer a model
+choice from a reference's base model, a previous generation, or inherited
+composer settings. This also applies when editing an existing Flux.1 draft:
+use the catalog default, preserve the subject references, and briefly explain
+the model change. A Flux-trained avatar is a subject reference, not a reason
+to generate with Flux.1.
 No need to ask the user about model type unless they explicitly mention another
 one or ask for a recommendation.
 
