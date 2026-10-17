@@ -20,10 +20,11 @@ WORKFLOW = "plugin.yml"
 BRANCH = "main"
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 ALLOWED_RELEASE_FILES = {
-    ".claude-plugin/marketplace.json",
     ".claude-plugin/plugin.json",
+    "packaging/marketplaces/claude.json",
+    "packaging/openai/plugin.json",
+    "packaging/openai/.codex-plugin/plugin.json",
 }
-ALLOWED_RELEASE_PREFIXES = ("plugins/astria/", "plugins/astria-claude/",)
 
 
 class ReleaseError(RuntimeError):
@@ -58,7 +59,7 @@ def changed_files():
 
 
 def is_release_file(path):
-    return path in ALLOWED_RELEASE_FILES or path.startswith(ALLOWED_RELEASE_PREFIXES)
+    return path in ALLOWED_RELEASE_FILES
 
 
 def require_release_scope(paths):
@@ -82,7 +83,7 @@ def require_main_matches_origin():
 
 
 def require_newer_version(version):
-    current = json.loads((ROOT / "plugins" / "astria" / "plugin.json").read_text(encoding="utf-8"))["version"]
+    current = json.loads((ROOT / "packaging" / "openai" / "plugin.json").read_text(encoding="utf-8"))["version"]
     current_core = tuple(int(part) for part in current.split("-", 1)[0].split("+", 1)[0].split("."))
     requested_core = tuple(int(part) for part in version.split("-", 1)[0].split("+", 1)[0].split("."))
     if requested_core <= current_core:
@@ -148,8 +149,13 @@ def checksum_digest(path):
 
 
 def verify_release(version):
+    for prefix in ("astria", "astria-claude", "astria-grok", "astria-marketplace"):
+        verify_release_asset(version, prefix)
+
+
+def verify_release_asset(version, prefix):
     tag = f"v{version}"
-    archive_name = f"astria-{version}.zip"
+    archive_name = f"{prefix}-{version}.zip"
     checksum_name = f"{archive_name}.sha256"
     release = json.loads(
         run(("gh", "release", "view", tag, "--repo", REPOSITORY, "--json", "assets,url"), capture=True)
@@ -226,7 +232,8 @@ def publish_release(version, skip_local_install):
     if skip_local_install:
         print("Skipped local Codex reinstall.")
     else:
-        run(("codex", "plugin", "add", "astria@astria"))
+        print("Downloading and registering the verified release marketplace.")
+        run((sys.executable, ROOT / "scripts" / "install-plugin-release.py", "--version", version, "--register-codex"))
         print("Local Codex plugin refreshed. Start a new task to load the released version.")
 
     print("OpenAI public-directory submission and publication remain manual:")
@@ -239,6 +246,7 @@ def dry_run(version, skip_local_install):
     require_main_matches_origin()
     require_newer_version(version)
     require_unreleased(version)
+    run((sys.executable, ROOT / "scripts" / "sync-plugin.py"))
     run((ROOT / "scripts" / "validate-plugin.py",))
     print(f"Dry run passed for v{version}.")
     print("Publish would prepare metadata, commit explicit release files, create and atomically push the tag,")

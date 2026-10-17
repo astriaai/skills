@@ -1,7 +1,7 @@
 # Astria for Claude
 
 Generate images and videos, edit images, reuse references, and run photoshoot
-templates with Astria directly in Claude. The plugin includes twelve shared
+templates with Astria directly in Claude. The plugin includes shared
 Astria skills and connects to `https://mcp.astria.ai/mcp`. No local executable,
 Python installation, API key, or client secret is needed for remote workflows.
 
@@ -15,11 +15,12 @@ registers its OAuth client automatically through Dynamic Client Registration
 Each person connects their own Astria account. Ask Claude to identify the
 connected account before using a shared workspace.
 
-In Claude Code, install `astria@astria` from the `astriaai/skills` marketplace
+In Claude Code, install `astria@astria` from the extracted release marketplace (see the repository README)
 and use `/mcp` to authenticate. For a local preview:
 
 ```sh
-claude --plugin-dir ./plugins/astria-claude
+python3 scripts/sync-plugin.py
+claude --plugin-dir ./dist/marketplace/plugins/astria-claude
 ```
 
 On claude.ai, use **Customize > Plugins > Add > Upload plugin** to upload

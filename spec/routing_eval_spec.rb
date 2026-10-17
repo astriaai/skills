@@ -2,6 +2,10 @@ require 'rspec/core'
 require_relative '../scripts/routing-eval'
 
 RSpec.describe AstriaRoutingEval do
+  before(:all) do
+    raise "Package generation failed" unless system("python3", File.expand_path("../scripts/sync-plugin.py", __dir__), out: File::NULL)
+  end
+
   def call(name, arguments = {}, result = {}, provider: 'astria')
     { 'provider' => provider, 'name' => name, 'arguments' => arguments, 'result' => result, }
   end
@@ -114,7 +118,7 @@ RSpec.describe AstriaRoutingEval do
 
   it 'packages exactly five positive and three negative production reviewer cases' do
     root = File.expand_path('..', __dir__)
-    %w[plugins/astria/plugin.json plugins/astria/.codex-plugin/plugin.json].each do |relative|
+    %w[dist/marketplace/plugins/astria/plugin.json dist/marketplace/plugins/astria/.codex-plugin/plugin.json].each do |relative|
       cases = JSON.parse(File.read(File.join(root, relative))).fetch('extensions').fetch('com.openai').fetch('review').fetch('test_cases')
       expect(cases.fetch('positive').length).to eq(5)
       expect(cases.fetch('negative').length).to eq(3)
@@ -124,7 +128,7 @@ RSpec.describe AstriaRoutingEval do
 
   it 'uses a distinct ChatGPT registration without changing native names or the dedicated endpoint' do
     root = File.expand_path('..', __dir__)
-    portable = JSON.parse(File.read(File.join(root, 'plugins/astria/plugin.json')))
+    portable = JSON.parse(File.read(File.join(root, 'dist/marketplace/plugins/astria/plugin.json')))
     expect(portable.fetch('name')).to eq('astria')
     Dir.mktmpdir('astria-package-spec') do |directory|
       expect(system('python3', File.join(root, 'scripts/build-plugin.py'), directory, out: File::NULL)).to be(true)
@@ -133,10 +137,10 @@ RSpec.describe AstriaRoutingEval do
       expect(uploaded.fetch('name')).to eq('astria-mcp')
     end
     expect(portable.fetch('extensions').fetch('com.openai').fetch('interface').fetch('displayName')).to eq('Astria')
-    %w[plugins/astria/.codex-plugin/plugin.json plugins/astria-claude/.claude-plugin/plugin.json].each do |relative|
+    %w[dist/marketplace/plugins/astria/.codex-plugin/plugin.json dist/marketplace/plugins/astria-claude/.claude-plugin/plugin.json].each do |relative|
       expect(JSON.parse(File.read(File.join(root, relative))).fetch('name')).to eq('astria')
     end
-    %w[plugins/astria/mcp.json plugins/astria/.mcp.json plugins/astria-claude/.mcp.json].each do |relative|
+    %w[dist/marketplace/plugins/astria/mcp.json dist/marketplace/plugins/astria/.mcp.json dist/marketplace/plugins/astria-claude/.mcp.json].each do |relative|
       config = JSON.parse(File.read(File.join(root, relative)))
       expect(config.fetch('mcpServers').fetch('astria').fetch('url')).to eq('https://mcp.astria.ai/mcp')
     end

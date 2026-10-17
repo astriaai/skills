@@ -11,8 +11,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PLUGIN_ROOT = ROOT / "plugins" / "astria"
-CLAUDE_ROOT = ROOT / "plugins" / "astria-claude"
+MARKETPLACE_ROOT = ROOT / "dist" / "marketplace"
+PLUGIN_ROOT = MARKETPLACE_ROOT / "plugins" / "astria"
+CLAUDE_ROOT = MARKETPLACE_ROOT / "plugins" / "astria-claude"
+GROK_ROOT = MARKETPLACE_ROOT / "plugins" / "astria-grok"
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 
 
@@ -65,6 +67,36 @@ def validate_tool_examples(sources):
                         require(all(item in field["items"]["enum"] for item in value), f"invalid {name}.{key} choices in {path}")
 
 
+def validate_grok(claude):
+    grok = read_json(GROK_ROOT / ".grok-plugin" / "plugin.json")
+    cursor = read_json(GROK_ROOT / ".cursor-plugin" / "plugin.json")
+    require({key: grok[key] for key in claude} == claude, "Grok metadata differs from canonical metadata")
+    require(cursor == {**grok, "skills": "./skills/", "mcpServers": "./mcp.json"}, "Cursor manifest is stale")
+    require(file_map(GROK_ROOT / "skills") == file_map(PLUGIN_ROOT / "skills"), "Grok skills differ from canonical skills")
+    for filename in (".mcp.json", "mcp.json"):
+        require((GROK_ROOT / filename).read_bytes() == (ROOT / ".mcp.json").read_bytes(), f"Grok {filename} is stale")
+    require((GROK_ROOT / grok["logo"]).read_bytes() == (PLUGIN_ROOT / "assets" / "logo.png").read_bytes(), "Grok logo is stale")
+    require((GROK_ROOT / "LICENSE").read_bytes() == (ROOT / "LICENSE").read_bytes(), "Grok license is stale")
+    require((GROK_ROOT / "README.md").read_bytes() == (ROOT / "docs" / "GROK.md").read_bytes(), "Grok README is stale")
+    require(not (GROK_ROOT / "hooks").exists(), "Grok MCP workflows need no login hooks")
+    require(not (GROK_ROOT / "bin").exists(), "Grok package should use the hosted MCP")
+    require(not list(GROK_ROOT.rglob("*.pyc")), "Grok package contains Python bytecode")
+
+    for host, source in (
+        ("grok", {"type": "local", "path": "./plugins/astria-grok"}),
+        ("cursor", "./plugins/astria-grok"),
+    ):
+        marketplace = read_json(MARKETPLACE_ROOT / f".{host}-plugin" / "marketplace.json")
+        require(marketplace["name"] == "astria", f"{host} marketplace name is incorrect")
+        require(marketplace["owner"] == claude["author"], f"{host} marketplace owner is incorrect")
+        require(len(marketplace["plugins"]) == 1, f"{host} marketplace must contain one Astria entry")
+        entry = marketplace["plugins"][0]
+        require(entry["source"] == source, f"{host} marketplace source is incorrect")
+        for key in ("name", "description", "version", "homepage", "keywords"):
+            require(entry[key] == grok[key], f"{host} marketplace {key} is stale")
+    require(read_json(MARKETPLACE_ROOT / ".cursor-plugin" / "marketplace.json")["metadata"]["version"] == claude["version"], "Cursor marketplace version is stale")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--expected-version")
@@ -74,8 +106,8 @@ def main():
     codex = read_json(PLUGIN_ROOT / ".codex-plugin" / "plugin.json")
     claude = read_json(ROOT / ".claude-plugin" / "plugin.json")
     generated_claude = read_json(PLUGIN_ROOT / ".claude-plugin" / "plugin.json")
-    claude_marketplace = read_json(ROOT / ".claude-plugin" / "marketplace.json")
-    codex_marketplace = read_json(ROOT / ".agents" / "plugins" / "marketplace.json")
+    claude_marketplace = read_json(MARKETPLACE_ROOT / ".claude-plugin" / "marketplace.json")
+    codex_marketplace = read_json(MARKETPLACE_ROOT / ".agents" / "plugins" / "marketplace.json")
 
     versions = {
         portable["version"],
@@ -118,6 +150,8 @@ def main():
         Path(entry).name: ROOT / Path(entry).name
         for entry in claude_marketplace["plugins"][0]["skills"]
     }
+    require(claude_marketplace == read_json(ROOT / "packaging" / "marketplaces" / "claude.json"), "Claude marketplace template is stale")
+    require(codex_marketplace == read_json(ROOT / "packaging" / "marketplaces" / "codex.json"), "Codex marketplace template is stale")
     generated = {path.name: path for path in (PLUGIN_ROOT / "skills").iterdir() if path.is_dir()}
     require(sources.keys() == generated.keys(), "generated skill names do not match the source marketplace")
     for name, source in sources.items():
@@ -135,6 +169,7 @@ def main():
     require(not list(CLAUDE_ROOT.rglob("*.pyc")), "Claude plugin contains Python bytecode")
 
     validate_tool_examples(sources)
+    validate_grok(claude)
 
     require((ROOT / "bin" / "astria").read_bytes() == (PLUGIN_ROOT / "bin" / "astria").read_bytes(), "generated CLI is stale")
     require((ROOT / "mcp.json").read_bytes() == (PLUGIN_ROOT / "mcp.json").read_bytes(), "generated MCP config is stale")

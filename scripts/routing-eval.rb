@@ -86,13 +86,14 @@ module AstriaRoutingEval
   end
 
   def self.run(host:, root:, catalog:, output:, selected: nil, runs: 1, cases_path: nil)
+    raise "Package generation failed" unless system("python3", File.join(root, "scripts/sync-plugin.py"))
     cases_path = File.join(root, 'evals/routing/cases.json') if cases_path.nil?
     cases = JSON.parse(File.read(cases_path))
     cases = cases.select { |example| selected.include?(example.fetch('id')) } if selected
     raise 'No matching cases' if cases.empty?
     raise 'Choose a fresh output directory; existing reports must not be overwritten' if File.exist?(File.join(output, 'report.json'))
     FileUtils.mkdir_p(output)
-    report = { host: host, started_at: Time.now.utc.iso8601, host_version: Open3.capture2(host, '--version').first.strip, catalog_sha256: Digest::SHA256.file(catalog).hexdigest, cases_sha256: Digest::SHA256.file(cases_path).hexdigest, fixture_sha256: Digest::SHA256.file(File.join(root, 'evals/routing/mcp_fixture.rb')).hexdigest, skill_sha256: Dir.glob(File.join(root, 'plugins/astria/skills/*/SKILL.md')).to_h { |path| [File.basename(File.dirname(path)), Digest::SHA256.file(path).hexdigest] }, cases: [], }
+    report = { host: host, started_at: Time.now.utc.iso8601, host_version: Open3.capture2(host, '--version').first.strip, catalog_sha256: Digest::SHA256.file(catalog).hexdigest, cases_sha256: Digest::SHA256.file(cases_path).hexdigest, fixture_sha256: Digest::SHA256.file(File.join(root, 'evals/routing/mcp_fixture.rb')).hexdigest, skill_sha256: Dir.glob(File.join(root, 'dist/marketplace/plugins/astria/skills/*/SKILL.md')).to_h { |path| [File.basename(File.dirname(path)), Digest::SHA256.file(path).hexdigest] }, cases: [], }
     fixture = File.join(root, 'evals/routing/mcp_fixture.rb')
     competitors = File.join(root, 'evals/routing/competitors.json')
     context = 'The connected MCP servers use synthetic test data and media. Complete the user request using those tools. Do not download fixture media or call external services. Preserve the requested provider and scope. Use applicable available skills to perform their workflows.'
@@ -105,10 +106,10 @@ module AstriaRoutingEval
         config_path = File.join(directory, 'mcp.json'); File.write(config_path, JSON.pretty_generate(config))
         trace_path = File.join(directory, 'trace.jsonl'); stderr_path = File.join(directory, 'stderr.log')
         command = if host == 'claude'
-          ['claude', '-p', example.fetch('prompt'), '--plugin-dir', File.join(root, 'plugins/astria-claude'), '--strict-mcp-config', '--mcp-config', config_path, '--setting-sources', '', '--tools', 'Skill', '--allowedTools', 'Skill,mcp__astria__*,mcp__higgsfield__*,mcp__imagegen__*', '--permission-mode', 'dontAsk', '--append-system-prompt', context, '--output-format', 'stream-json', '--verbose', '--no-session-persistence']
+          ['claude', '-p', example.fetch('prompt'), '--plugin-dir', File.join(root, 'dist/marketplace/plugins/astria-claude'), '--strict-mcp-config', '--mcp-config', config_path, '--setting-sources', '', '--tools', 'Skill', '--allowedTools', 'Skill,mcp__astria__*,mcp__higgsfield__*,mcp__imagegen__*', '--permission-mode', 'dontAsk', '--append-system-prompt', context, '--output-format', 'stream-json', '--verbose', '--no-session-persistence']
         elsif host == 'codex'
           skills = File.join(directory, '.agents/skills'); FileUtils.mkdir_p(skills)
-          Dir.glob(File.join(root, 'plugins/astria/skills/*')).each { |skill| FileUtils.ln_s(skill, File.join(skills, File.basename(skill))) }
+          Dir.glob(File.join(root, 'dist/marketplace/plugins/astria/skills/*')).each { |skill| FileUtils.ln_s(skill, File.join(skills, File.basename(skill))) }
           home = File.join(directory, 'codex-home'); FileUtils.mkdir_p(home)
           FileUtils.ln_s(File.join(Dir.home, '.codex/auth.json'), File.join(home, 'auth.json'))
           options = config.fetch(:mcpServers).flat_map { |provider, server| ['-c', "mcp_servers.#{provider}.command=\"ruby\"", '-c', "mcp_servers.#{provider}.args=#{JSON.generate(server.fetch(:args))}", '-c', "mcp_servers.#{provider}.default_tools_approval_mode=\"approve\""] }

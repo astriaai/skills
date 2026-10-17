@@ -5,60 +5,98 @@ and video generation, references, prompt writing and photoshoot templates.
 The plugin connects to `https://mcp.astria.ai/mcp`. Your agent host handles
 Astria login and keeps the connection authenticated.
 
+## Download a release
+
+Download the ZIP and matching `.sha256` from [GitHub Releases](https://github.com/astriaai/skills/releases/latest).
+Releases contain:
+
+- `astria-marketplace-X.Y.Z.zip`: extract into a persistent directory to install
+  in Codex, Claude Code, Grok Build, or Cursor.
+- `astria-X.Y.Z.zip`: OpenAI directory upload package.
+- `astria-claude-X.Y.Z.zip`: Claude web/desktop upload package.
+- `astria-grok-X.Y.Z.zip`: standalone Grok Build/Cursor package.
+
+From a source checkout, the download helper selects the latest release, checks
+its SHA-256, and extracts it without changing your host configuration:
+
+```bash
+python3 scripts/install-plugin-release.py
+# Or select an exact published version:
+python3 scripts/install-plugin-release.py --version X.Y.Z
+```
+
+The default destination is `~/.local/share/astria/plugins/X.Y.Z`. The helper
+prints installation commands with the full path. To upgrade, download a new
+version and register its extracted marketplace. Local marketplaces are snapshots;
+Git marketplace upgrade commands do not download new release ZIPs. If a host
+already has an `astria` marketplace registered from the Git repository, migrate
+that source to the extracted release path using the host's marketplace settings
+before reinstalling. Keep the extracted folder for as long as it is registered.
+The first release containing these new assets must be published before using
+the helper; older releases do not contain the marketplace ZIP.
+
 ## Install in Codex
 
+After extracting the marketplace ZIP to `/absolute/path/astria-marketplace`:
+
 ```bash
-codex plugin marketplace add astriaai/skills --ref main
+codex plugin marketplace add /absolute/path/astria-marketplace
 codex plugin add astria@astria
 ```
 
-Connect Astria through the host's plugin/MCP connection settings and complete
-its OAuth login. Start a new task after installation or upgrade so refreshed
-skills and tools load. For a newer repository snapshot:
-
-```bash
-codex plugin marketplace upgrade astria
-codex plugin add astria@astria
-```
-
-ChatGPT workspace administrators can import `astriaai/skills` as a GitHub
-marketplace. Imported marketplaces can be refreshed with **Sync now**. Public
-directory availability requires a reviewed, published OpenAI plugin version
-and its registered Astria connection.
+Complete Astria OAuth through the plugin/MCP connection settings. Start a new
+chat after installing or upgrading. The source repository no longer ships a
+ready-to-install Git marketplace. ChatGPT administrator GitHub marketplace
+imports need a repository containing built packages; use the reviewed public
+plugin or a separately hosted generated repository for that distribution route.
+See [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins).
 
 ## Install in Claude (web, desktop and mobile)
 
-Build the Claude archive with:
-
-```bash
-python3 scripts/build-plugin.py /tmp/astria-plugin-preview --target claude
-```
-
-Upload `astria-claude-X.Y.Z.zip` through **Customize > Plugins > Add > Upload
-plugin**, then connect Astria from its **Connectors** tab. Complete Astria
-OAuth sign-in and consent; choose **Sign in now > Register automatically**
-when prompted. DCR registers Claude's public client without a client secret.
-The remote connection works in the iOS and Android apps as well. Interactive
-previews use the same MCP Apps resources as ChatGPT, when supported by the host.
-Ask Claude to open the Astria gallery to browse generations.
-
-The Claude marketplace points at `plugins/astria-claude`, a package without a
-top-level `bin/` directory (which Claude chat and Cowork reject). Its twelve
-skills and MCP endpoint are generated from the same sources as OpenAI/Codex.
-See [Claude setup and limitations](docs/CLAUDE.md). A local archive does not
-publish a directory listing.
+Upload the release's `astria-claude-X.Y.Z.zip` through **Customize > Plugins >
+Add > Upload plugin**, then connect Astria from its **Connectors** tab. Complete
+Astria OAuth sign-in and consent; choose **Sign in now > Register automatically**
+when prompted. See [Claude setup and limitations](docs/CLAUDE.md).
+An upload does not publish a directory listing.
 
 ## Install in Claude Code
 
+After extracting the marketplace ZIP:
+
 ```text
-/plugin marketplace add astriaai/skills
+/plugin marketplace add /absolute/path/astria-marketplace
 /plugin install astria@astria
 ```
 
-Use `/mcp` to connect/authenticate Astria, or preview the local package with
-`claude --plugin-dir ./plugins/astria-claude`. The `.mcp.json` uses a fixed
-HTTPS URL; no API key, client secret, shell process, or CLI login hook is
-required. CLI-only workflows require a separately installed Astria CLI.
+Use `/mcp` to connect Astria. For a source preview, run
+`scripts/sync-plugin.sh --no-local-links`, then
+`claude --plugin-dir ./dist/marketplace/plugins/astria-claude`.
+See [Claude local marketplaces](https://code.claude.com/docs/en/plugin-marketplaces).
+
+## Grok.com connector catalog
+
+Astria's hosted MCP server is `https://mcp.astria.ai/mcp`. Users can connect
+it through Grok's **New Connector > Custom** flow. A custom connection does
+not create a public catalog listing. Astria's public listing and Grok-specific
+validation are pending; see [Grok setup and publication](docs/GROK.md).
+
+## Grok Bot, Grok Build, and Cursor
+
+Extract the standalone Grok ZIP, or use `plugins/astria-grok` inside the
+extracted marketplace. Install that directory in Grok Build:
+
+```bash
+grok plugin validate /absolute/path/astria-grok
+grok plugin install /absolute/path/astria-grok --trust
+```
+
+For Cursor, copy that directory into `~/.cursor/plugins/local/astria/`, reload,
+and authenticate Astria in MCP settings. Grok Bot marketplace distribution
+still requires Cursor review and a public repository containing the built
+plugin. Release ZIPs support local installation; this source-only repository
+is no longer a valid public Cursor submission. See
+[Cursor plugin distribution](https://cursor.com/docs/reference/plugins) and
+[Grok setup](docs/GROK.md). Live Grok Bot validation remains pending.
 
 ## Install skills in other agents
 
@@ -85,7 +123,7 @@ curl or local API-key file is required for these MCP workflows.
 
 ## Optional CLI workflows
 
-The plugin still bundles the [Astria CLI](https://github.com/astriaai/cli) for
+The OpenAI/Codex package bundles the [Astria CLI](https://github.com/astriaai/cli) for
 local file uploads/downloads, batch orchestration, video inspection/Variate,
 workspace/template creation, landing-page HTML and agent handoff. These
 capabilities need a terminal, Python 3.9+, curl and independent CLI login:
@@ -129,8 +167,11 @@ python3 scripts/validate-plugin.py
 python3 scripts/build-plugin.py /tmp/astria-plugin-preview
 ```
 
-The skills are canonical at the repository root. Synchronization materializes
-both packages and both compatibility MCP configurations; validation checks
+The skills are canonical at the repository root. `packaging/` holds the source
+manifests, marketplace templates, and assets. Generated directories are never
+committed; CI builds and publishes ZIPs with checksums on version tags. Synchronization materializes
+all three packages, marketplace catalogs and compatibility MCP configurations
+under ignored `dist/marketplace/`; validation checks
 source parity and tool examples against schemas generated from the shared CLI.
 `scripts/sync-cli.sh` also synchronizes the sibling Rails MCP contract when
 that checkout is present.

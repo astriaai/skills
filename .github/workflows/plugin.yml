@@ -25,22 +25,14 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '4.0'
+      - name: Generate packages from source
+        run: scripts/sync-plugin.sh --no-local-links
       - name: Test routing graders and local MCP fixtures
         run: |
           gem install rspec --no-document
-          rspec spec/routing_eval_spec.rb
+          rspec spec/routing_eval_spec.rb spec/plugin_package_spec.rb
       - name: Test release tooling
         run: python3 -m unittest discover -s tests -v
-      - name: Refresh generated plugins
-        run: scripts/sync-plugin.sh --no-local-links
-      - name: Require committed plugin output
-        run: |
-          git status --porcelain --untracked-files=all -- plugins/astria plugins/astria-claude > /tmp/astria-plugin-status
-          if [ -s /tmp/astria-plugin-status ]; then
-            cat /tmp/astria-plugin-status
-            echo "Run scripts/sync-plugin.sh and commit both generated packages."
-            exit 1
-          fi
       - name: Validate release tag
         if: startsWith(github.ref, 'refs/tags/v')
         run: scripts/validate-plugin.py --expected-version "${GITHUB_REF_NAME#v}"
@@ -51,6 +43,8 @@ jobs:
         run: |
           scripts/build-plugin.py dist
           scripts/build-plugin.py dist --target claude
+          scripts/build-plugin.py dist --target grok
+          scripts/build-plugin.py dist --target marketplace
       - uses: actions/upload-artifact@v4
         with:
           name: astria-plugin

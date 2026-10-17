@@ -12,19 +12,23 @@ SPEC.loader.exec_module(release_driver)
 
 
 class ReleaseDriverTest(unittest.TestCase):
-    def test_release_scope_accepts_metadata_and_generated_plugin(self):
+    def test_release_scope_accepts_only_canonical_metadata(self):
         release_driver.require_release_scope(
             [
                 ".claude-plugin/plugin.json",
-                ".claude-plugin/marketplace.json",
-                "plugins/astria/.codex-plugin/plugin.json",
-                "plugins/astria/skills/example/SKILL.md",
+                "packaging/marketplaces/claude.json",
+                "packaging/openai/.codex-plugin/plugin.json",
+                "packaging/openai/plugin.json",
             ]
         )
 
     def test_release_scope_rejects_unrelated_changes(self):
         with self.assertRaisesRegex(release_driver.ReleaseError, "unexpected files"):
             release_driver.require_release_scope(["README.md", "plugins/astria/plugin.json"])
+
+    def test_release_scope_rejects_generated_files(self):
+        with self.assertRaisesRegex(release_driver.ReleaseError, "unexpected files"):
+            release_driver.require_release_scope(["dist/marketplace/plugins/astria/plugin.json"])
 
     def test_find_tag_run_ignores_main_branch_run_for_same_commit(self):
         runs = [
@@ -38,7 +42,7 @@ class ReleaseDriverTest(unittest.TestCase):
         original_root = release_driver.ROOT
         with tempfile.TemporaryDirectory() as directory:
             release_driver.ROOT = Path(directory)
-            manifest = release_driver.ROOT / "plugins" / "astria" / "plugin.json"
+            manifest = release_driver.ROOT / "packaging" / "openai" / "plugin.json"
             manifest.parent.mkdir(parents=True)
             manifest.write_text(json.dumps({"version": "1.5.1"}), encoding="utf-8")
             with self.assertRaisesRegex(release_driver.ReleaseError, "must be newer"):

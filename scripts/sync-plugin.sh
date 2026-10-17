@@ -1,5 +1,5 @@
 #!/bin/sh
-# Refresh the self-contained OpenAI plugin and every developer skill symlink.
+# Generate ignored dist/marketplace packages and every developer skill symlink.
 # CI passes --no-local-links because it has no persistent developer home.
 set -eu
 

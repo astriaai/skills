@@ -1,8 +1,8 @@
 # Astria skills — repository guide
 
 The canonical public skills live in top-level `<name>/SKILL.md` directories.
-The root is a Claude marketplace plugin; `plugins/astria` is the generated
-portable OpenAI/Codex package. The Astria web-agent sandbox also bundles these
+Source manifests and assets live in `packaging/`; generated packages and
+marketplaces live under ignored `dist/marketplace/` and ship as release ZIPs. The Astria web-agent sandbox also bundles these
 skills with its independently authenticated CLI and private embedded skills.
 
 ## API transport
@@ -26,13 +26,15 @@ parameters there and synchronize Rails through `bin/sync-astria-mcp`.
 
 ## Packaging
 
-- `.claude-plugin/marketplace.json` owns the canonical skill list. Add each
+- `packaging/marketplaces/claude.json` owns the canonical skill list. Add each
   skill as a `"./<name>"` path.
 - `mcp.json` owns the portable HTTPS endpoint. `scripts/sync-plugin.py`
   generates root and packaged `.mcp.json` HTTP compatibility configs.
 - `scripts/sync-plugin.sh --no-local-links` copies canonical skills (including
   references), manifests, MCP configuration and the vendored CLI to
-  `plugins/astria`. Without that flag it also refreshes developer symlinks.
+  `dist/marketplace/plugins/`. Without that flag it also refreshes developer symlinks.
+- Never commit generated plugin copies. Build `--target marketplace` for the
+  complete installable marketplace ZIP; individual targets remain upload ZIPs.
 - No SessionStart CLI-auth hook: OAuth is managed by the host.
 - Keep skill frontmatter descriptions focused; retain shell permissions only
   for skills that actually need optional terminal workflows.

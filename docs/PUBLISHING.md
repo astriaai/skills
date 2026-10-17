@@ -17,27 +17,27 @@ scripts/release-driver.py X.Y.Z --publish
 
 The driver fetches tags and `origin/main`, refuses dirty, detached, stale, or
 already-tagged releases, then runs the existing `release-plugin.sh` preparation.
-It commits only the generated plugin and release metadata, creates an annotated
+It commits only canonical release metadata, creates an annotated
 tag, and atomically pushes the branch and tag. It waits for the tagged GitHub
-Actions run, verifies the release archive against both its published checksum
-and the local build, reinstalls `astria@astria`, and prints the OpenAI Platform
+Actions run, verifies all four release archives against their published checksums
+and local builds, downloads the marketplace and reinstalls `astria@astria`, and prints the OpenAI Platform
 URL for the manual directory step. Use `--skip-local-install` only on a machine
 that does not have the Codex marketplace configured.
 
 `release-plugin.sh` remains the lower-level prepare-only command for debugging.
 It updates the Claude and OpenAI versions together, materializes the native
-plugin under `plugins/astria`, refreshes every local Claude and Codex skill
-symlink, validates source parity, and writes an upload-ready archive to `dist/`.
+packages under ignored `dist/marketplace/plugins/`, refreshes every local Claude and Codex skill
+symlink, validates source parity, and writes upload archives and an installable marketplace ZIP to `dist/`.
 
 Whenever the vendored CLI changes, `scripts/sync-cli.sh` invokes the same plugin
 sync automatically. Adding or renaming a skill requires updating the existing
-Claude marketplace list; the sync then updates both the native plugin and every
+`packaging/marketplaces/claude.json` skill list; the sync then updates both the native plugin and every
 developer symlink.
 
-Both packages use the host's MCP OAuth connection. The former CLI-auth
+All packages use the host's MCP OAuth connection. The former CLI-auth
 SessionStart hook is removed; neither package requires CLI login at startup.
 `mcp.json` is the endpoint source of truth; synchronization generates the root
-Claude `.mcp.json` and both native package MCP configurations.
+Claude `.mcp.json` and generated package MCP configurations.
 
 ## Distribution and upgrades
 
@@ -49,13 +49,18 @@ The archive builder assigns this identifier only to the ChatGPT upload ZIP.
 Codex and Claude Code source manifests keep their `astria` marketplace identifiers. All packages
 use the dedicated hostname; do not restore the old API URL to satisfy a draft.
 
-- Codex developers can install this repository marketplace and reinstall the
-  `astria@astria` plugin after local changes. The local skills remain live
-  symlinks, so new tasks immediately use the edited source.
-- ChatGPT workspace administrators can import `astriaai/skills` as a GitHub
-  marketplace. ChatGPT syncs imported repositories daily; **Sync now** applies
-  a valid update immediately, while an invalid update leaves the previous
-  working version installed.
+- Release users download `astria-marketplace-X.Y.Z.zip` and its checksum,
+  extract it to a persistent directory, then register that local marketplace.
+  `python3 scripts/install-plugin-release.py --version X.Y.Z` verifies and extracts
+  the download and prints the commands. Upgrades require a new download and
+  updating the registered local marketplace path; Git upgrade no longer applies.
+- Developers generate `dist/marketplace/` and register that local directory.
+  The canonical personal skill symlinks still reflect source edits immediately.
+- Existing Git marketplace users must switch their registered Astria source to
+  the extracted release directory through the host's marketplace settings.
+  The source repository no longer provides a working Git marketplace.
+- ChatGPT workspace GitHub imports require a separately hosted generated
+  repository. This source-only repository cannot be used for those imports.
 - Public-directory users receive only versions that Astria submits, passes
   OpenAI review, and publishes in the OpenAI Platform portal. Upload the
   `dist/astria-X.Y.Z.zip` asset as a new version. Review and publishing cannot
@@ -95,22 +100,24 @@ it does not generate AI media. Astria cannot truthfully make that declaration;
 obtain written permission before submitting either public directory listing.
 Do not change descriptions or attestations to conceal the generation capability.
 
-The Claude marketplace entry uses `plugins/astria-claude`; canonical skills
-remain at the repository root. Sync generates both packages. Build a separate
+The generated Claude marketplace entry uses `plugins/astria-claude` relative
+to the extracted marketplace root; canonical skills remain at the source
+repository root. Sync generates all packages under `dist/marketplace/`. Build a separate
 Claude upload archive with `scripts/build-plugin.py dist --target claude`, and
-validate the folder with `claude plugin validate plugins/astria-claude`.
+validate the folder with `claude plugin validate dist/marketplace/plugins/astria-claude`.
 
 Claude chat and Cowork reject a top-level `bin/` directory. The Claude package
-therefore contains the twelve skills, manifest, fixed remote `.mcp.json`, and a
-README. The OpenAI package retains its optional CLI. CI packages both archives
+therefore contains the shared skills, manifest, fixed remote `.mcp.json`, and a
+README. The OpenAI package retains its optional CLI. CI packages all four archives
 and their checksums; no repository push or directory submission happens during
 a local build.
 
 At <https://claude.ai/directory/manage>, submit the MCP server first as a
 connector using the universal URL `https://mcp.astria.ai/mcp` and OAuth DCR.
-Submit the plugin bundle from `astriaai/skills`, folder `plugins/astria-claude`,
-from the same organization and pair the listings. The repository must contain
-the generated Claude package on the submitted branch. Directory terms and
+If the directory requires a Git repository, submit a separately hosted
+generated repository containing the Claude package, from the same organization
+and pair the listings. Do not submit this source-only repository as a built
+plugin. For local Claude installation, upload the release ZIP instead. Directory terms and
 review remain separate from creating a local package.
 
 Before claiming parity, test Astria consent, `get_profile`, generation results,
@@ -125,53 +132,50 @@ References: [plugin layout](https://claude.com/docs/plugins/build),
 [OAuth requirements](https://claude.com/docs/connectors/building/authentication),
 [directory publication](https://claude.com/docs/directory/publish).
 
-## Routing evaluation
+## Grok.com public connector catalog
 
-Discovery changes need behavioral tests in addition to schema/package validation.
-`evals/routing/cases.json` contains direct, indirect, advice-only, missing-input,
-browse-only, quoted-command, and explicit competing-provider requests. Keep
-expected outcomes separate from model inputs; do not alter a prompt or loosen a
-grader just to turn a demonstrated failure green.
+The Grok.com Connectors catalog is separate from the bot and CLI plugin
+marketplaces below. A package release or custom MCP connection does not
+publish a public connector tile. Grok's [connector documentation](https://docs.x.ai/grok/connectors)
+describes user setup but currently gives no provider submission process.
+Contact `support@x.ai`, as listed on the [official contact page](https://x.ai/contact),
+to request catalog onboarding and review requirements. Public listing and
+Grok-specific validation remain pending. See [Grok setup](GROK.md).
 
-Run the offline RSpec grader/fixture checks with `rspec spec/routing_eval_spec.rb`.
-CI runs these checks; they require no model login or generation credits.
+## Grok Bot and Grok Build
 
-For real agent runs, first synchronize both plugin packages and the Rails tool
-catalog. Use an authenticated host CLI and a fresh output directory:
+Synchronization generates `dist/marketplace/plugins/astria-grok`, its Grok
+Build and Cursor manifests, and catalogs under `dist/marketplace/`. All metadata versions follow the existing
+canonical manifest; the shared skills are copied from the same sources.
+Both Grok MCP files use the fixed OAuth endpoint, without credentials or hooks.
 
-```bash
-ruby scripts/routing-eval.rb --host codex --catalog ../sdbooth/config/astria_mcp/tools.json --output /tmp/astria-routing-codex
-ruby scripts/routing-eval.rb --host claude --catalog ../sdbooth/config/astria_mcp/tools.json --output /tmp/astria-routing-claude
-```
+Build `astria-grok-X.Y.Z.zip` with
+`python3 scripts/build-plugin.py dist --target grok`. CI and the release
+preparation script include this archive and its checksum. Extract the archive
+for a local preview; marketplace submission uses the public repository.
 
-Use `--case product-scenes,try-on-scenes,headshots-from-photos` to select cases
-or `--runs 3` for repeated measurements. `--cases evals/routing/heldout.json`
-tests three additional unbranded photo-led requests with newly supplied subjects
-rather than saved references. These prompts were fixed before their first run. Every case starts a fresh conversation.
-Codex loads the actual generated skills in an isolated temporary skill directory;
-Claude loads the generated plugin. Both receive local stdio MCP servers for
-Astria, Higgsfield, and a generic image generator. The fixture has no network
-client: it creates no real references, images, videos, or charges. Only those
-local test tools are approved by the runner; production connections and user
-approval preferences are unchanged. The Higgsfield description snapshot in
-`evals/routing/competitors.json` was captured on October 7, 2026. Its generation
-input schema is a representative subset, not a full implementation of Higgsfield.
+The marketplace ZIP includes catalogs pointing at its bundled package folders.
+Extract it to a persistent path before registering it with a host. See the
+README for local installation and migration from the former Git marketplace.
 
-The runner grades actual tool calls, reference IDs/classes, requested counts,
-idempotency, template-slot order, output retrieval, and focused skill loading.
-Advice-only and explicit competitor requests must not submit Astria content.
-Raw traces, call logs, and `report.json` stay under the requested output directory.
-An API/login error, permission denial, or process timeout is a failure, never an
-activation success. Review traces as well as aggregate scores.
+Cursor/Grok Bot public distribution still requires a public repository with a
+built plugin, plus review. This source-only repository and its release ZIPs do
+not satisfy that catalog's repository submission requirement. A separately
+hosted generated repository would be needed for that route. Grok.com connector
+catalog onboarding is a separate process and is unaffected by this change.
 
-To assert a live report with RSpec:
+## Source and artifact layout
 
-```bash
-ASTRIA_ROUTING_REPORT=/tmp/astria-routing-codex/report.json rspec spec/routing_eval_spec.rb
-```
+- Top-level skill directories and `bin/astria`: canonical content.
+- `packaging/openai/`: portable/native OpenAI manifests and assets.
+- `.claude-plugin/plugin.json`: canonical Claude/Grok metadata.
+- `packaging/marketplaces/`: canonical Claude and Codex catalog templates;
+  the Claude template also owns the skill list.
+- `dist/marketplace/`: generated catalogs and three complete packages (ignored).
+- `dist/*.zip` and `dist/*.sha256`: deterministic release assets (ignored).
 
-These fixtures test routing and workflow execution, not rendering quality,
-production OAuth, actual attachment uploads, or the ChatGPT/Claude mobile UI.
-Preserve the directory's production review scenarios for those host checks.
-Release new skill packages and rescan/review updated MCP metadata through the
-normal directory process before claiming that published users receive the copy.
+The source checkout contains no generated `plugins/` tree. The builder generates
+packages automatically, so a fresh checkout can build any target without a
+manual synchronization step. CI validates generated content instead of requiring
+it to be committed. The release driver commits only the four versioned source
+metadata files. No release is published by a local build.

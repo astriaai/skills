@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Materialize the OpenAI and Claude plugins from the canonical skill sources."""
+"""Materialize the OpenAI, Claude, and Grok plugins from canonical sources."""
 
 import json
 import os
@@ -10,9 +10,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PLUGIN_ROOT = ROOT / "plugins" / "astria"
-CLAUDE_ROOT = ROOT / "plugins" / "astria-claude"
-CLAUDE_MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
+MARKETPLACE_ROOT = ROOT / "dist" / "marketplace"
+PLUGIN_ROOT = MARKETPLACE_ROOT / "plugins" / "astria"
+CLAUDE_ROOT = MARKETPLACE_ROOT / "plugins" / "astria-claude"
+GROK_ROOT = MARKETPLACE_ROOT / "plugins" / "astria-grok"
+CLAUDE_MARKETPLACE = ROOT / "packaging" / "marketplaces" / "claude.json"
 
 
 def read_json(path):
@@ -51,7 +53,59 @@ def skill_sources():
     return [(Path(entry).name, ROOT / Path(entry).name) for entry in plugin["skills"]]
 
 
+def write_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def sync_grok():
+    manifest = read_json(ROOT / ".claude-plugin" / "plugin.json")
+    manifest.update({
+        "keywords": ["astria", "astria photoshoots", "astria image generation", "astria video"],
+        "logo": "assets/logo.png",
+    })
+    write_json(GROK_ROOT / ".grok-plugin" / "plugin.json", manifest)
+    write_json(GROK_ROOT / ".cursor-plugin" / "plugin.json", {
+        **manifest,
+        "skills": "./skills/",
+        "mcpServers": "./mcp.json",
+    })
+    sync_tree(PLUGIN_ROOT / "skills", GROK_ROOT / "skills")
+    for filename in (".mcp.json", "mcp.json"):
+        copy_file(ROOT / ".mcp.json", GROK_ROOT / filename)
+    copy_file(PLUGIN_ROOT / "assets" / "logo.png", GROK_ROOT / "assets" / "logo.png")
+    copy_file(ROOT / "LICENSE", GROK_ROOT / "LICENSE")
+    copy_file(ROOT / "docs" / "GROK.md", GROK_ROOT / "README.md")
+
+    entry = {
+        "name": manifest["name"],
+        "description": manifest["description"],
+        "version": manifest["version"],
+        "homepage": manifest["homepage"],
+        "category": "creative",
+        "keywords": manifest["keywords"],
+    }
+    marketplace = {"name": "astria", "owner": manifest["author"]}
+    write_json(MARKETPLACE_ROOT / ".grok-plugin" / "marketplace.json", {
+        **marketplace,
+        "description": manifest["description"],
+        "plugins": [{**entry, "domains": ["astria.ai"], "source": {"type": "local", "path": "./plugins/astria-grok"}}],
+    })
+    write_json(MARKETPLACE_ROOT / ".cursor-plugin" / "marketplace.json", {
+        **marketplace,
+        "metadata": {"description": manifest["description"], "version": manifest["version"]},
+        "plugins": [{**entry, "source": "./plugins/astria-grok"}],
+    })
+
+
 def main():
+    # This entire directory is build output. Remove files from older layouts
+    # so stale payloads cannot leak into a release marketplace.
+    if MARKETPLACE_ROOT.exists():
+        shutil.rmtree(MARKETPLACE_ROOT)
+    sync_tree(ROOT / "packaging" / "openai", PLUGIN_ROOT)
+    copy_file(CLAUDE_MARKETPLACE, MARKETPLACE_ROOT / ".claude-plugin" / "marketplace.json")
+    copy_file(ROOT / "packaging" / "marketplaces" / "codex.json", MARKETPLACE_ROOT / ".agents" / "plugins" / "marketplace.json")
     sources = skill_sources()
     names = [name for name, _source in sources]
     if len(names) != len(set(names)):
@@ -84,15 +138,18 @@ def main():
     # OAuth login is handled by the host; no CLI login hook is packaged.
     if (PLUGIN_ROOT / "hooks").exists():
         shutil.rmtree(PLUGIN_ROOT / "hooks")
-    sync_tree(ROOT / ".claude-plugin", PLUGIN_ROOT / ".claude-plugin")
+    copy_file(ROOT / ".claude-plugin" / "plugin.json", PLUGIN_ROOT / ".claude-plugin" / "plugin.json")
 
     CLAUDE_ROOT.mkdir(parents=True, exist_ok=True)
     sync_tree(PLUGIN_ROOT / "skills", CLAUDE_ROOT / "skills")
     copy_file(ROOT / ".claude-plugin" / "plugin.json", CLAUDE_ROOT / ".claude-plugin" / "plugin.json")
     copy_file(ROOT / ".mcp.json", CLAUDE_ROOT / ".mcp.json")
     copy_file(ROOT / "docs" / "CLAUDE.md", CLAUDE_ROOT / "README.md")
+    sync_grok()
+    copy_file(ROOT / "README.md", MARKETPLACE_ROOT / "README.md")
+    copy_file(ROOT / "LICENSE", MARKETPLACE_ROOT / "LICENSE")
 
-    print(f"Synced {len(sources)} skills -> {PLUGIN_ROOT} and {CLAUDE_ROOT}")
+    print(f"Synced {len(sources)} skills -> {PLUGIN_ROOT}, {CLAUDE_ROOT}, and {GROK_ROOT}")
 
 
 if __name__ == "__main__":

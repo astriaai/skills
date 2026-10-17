@@ -25,8 +25,8 @@ def main():
 
     for path in (
         ROOT / ".claude-plugin" / "plugin.json",
-        ROOT / "plugins" / "astria" / "plugin.json",
-        ROOT / "plugins" / "astria" / ".codex-plugin" / "plugin.json",
+        ROOT / "packaging" / "openai" / "plugin.json",
+        ROOT / "packaging" / "openai" / ".codex-plugin" / "plugin.json",
     ):
         update(path, lambda data: data.__setitem__("version", version))
 
@@ -34,7 +34,7 @@ def main():
         data["metadata"]["version"] = version
         data["plugins"][0]["version"] = version
 
-    update(ROOT / ".claude-plugin" / "marketplace.json", update_marketplace)
+    update(ROOT / "packaging" / "marketplaces" / "claude.json", update_marketplace)
     print(f"Set Astria plugin version -> {version}")
 
 
