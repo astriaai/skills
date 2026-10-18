@@ -157,6 +157,8 @@ Astria web-agent sandbox remains supported.
 | **store-photoshoot** | Store catalog to reusable photoshoot workflow; some steps need CLI/UI |
 | **landing-page-editor** | Edit a workspace's landing HTML through optional CLI access |
 | **storyboard** | Text-only cinematic video sequence from a draft or ordered images |
+| **music-video** | Music-led fashion campaign films from person, garment and location references |
+| **fashion-music-track** | Music tracks for fashion brands, runway shows and campaign films |
 | **artboard** | Legacy alias for Storyboard |
 
 ## Development and rollout
