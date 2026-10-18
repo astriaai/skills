@@ -36,7 +36,7 @@ tunes, (4) one pack per item-type / outfit formula with a fixed shot battery,
 (5) a QA'd pilot render, then the scaled catalog, and (6) a workspace landing
 page.
 
-Related skills: **astria-api** (MCP and optional CLI), **unique-headshot** (avatar casting),
+Related skills: **astria-api** (MCP and optional CLI), **avatar** (avatar casting),
 **prompt-writing** (prompt grammar & parameters), **packs-guide** (packs),
 **landing-page-editor** (the `/w/:slug` page).
 
@@ -134,7 +134,7 @@ studio on `#F5F5F5`/`#e9e9e9`-family off-whites, luxury lookbooks on pure
 ## Phase 5 — Cast the avatars (on-model registers only)
 
 Avatars are synthetic faces generated from trait-dense prompts, **no reference
-tune** — the **unique-headshot** method. Generate with
+tune** — the **avatar** method. Generate with
 `generate_images` with the live Recraft 4.1 Pro model ID, `num_images: "2"`,
 `aspect_ratio: "1:1"`, `inpaint_faces: false`, and a fresh idempotency key, bare
 shoulders, hair pulled back, **no jewelry on the face ref** (critical for

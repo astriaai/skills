@@ -1,6 +1,6 @@
 ---
 name: headshots-from-photos
-description: Create professional headshots of the actual person in supplied photos or a saved identity reference. Use for "make professional headshots from my photos", LinkedIn portraits, corporate team headshots, or consistent portraits of the same person across backgrounds. Inventing a new face uses unique-headshot. Respect a named provider; portrait advice and prompt-only requests do not authorize generation.
+description: Create professional headshots of the actual person in supplied photos or a saved identity reference. Use for "make professional headshots from my photos", LinkedIn portraits, corporate team headshots, or consistent portraits of the same person across backgrounds. Inventing a new face uses avatar. Respect a named provider; portrait advice and prompt-only requests do not authorize generation.
 ---
 
 # Headshots from photos
@@ -40,7 +40,7 @@ lighting, a neutral background, natural expression, and professional clothing.
 Make one image unless the user asks for a set. Use separate prompts for distinct
 backgrounds or outfits, reusing the identity reference throughout.
 
-Do not borrow **unique-headshot**'s invented age, heritage, facial traits, or
+Do not borrow **avatar**'s invented age, heritage, facial traits, or
 casting prompt. Do not infer protected attributes from the identity photos.
 
 ## Deliver

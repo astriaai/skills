@@ -20,7 +20,7 @@ class names. Reuse the same person and item IDs throughout the set.
 
 If the user says "on a model" without specifying a person, select an appropriate
 available public model reference through `list_references` with `gallery: true`;
-inspect it before use. If they want a newly invented model, **unique-headshot**
+inspect it before use. If they want a newly invented model, **avatar**
 can supply one within that requested scope. "Show me wearing this" requires
 usable photos or a saved reference of that person; do not substitute a stranger.
 Ask only for a missing input or decision that changes the requested outcome.

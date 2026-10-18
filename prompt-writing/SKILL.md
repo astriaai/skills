@@ -61,7 +61,7 @@ background:
 - Treat nationality words ("israeli", "french", "japanese") as styling/trait guidance for facial features and casting diversity, not as a request for references.
 - Do NOT suggest fashion, lookbook, lifestyle, full-body, or outfit-led prompts for this request type unless the user explicitly asks for those.
 
-See the `unique-headshot` skill for the detailed face-trait template.
+See the `avatar` skill for the detailed face-trait template.
 
 ## Interaction rule (strict)
 

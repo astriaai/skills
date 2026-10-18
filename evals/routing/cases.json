@@ -114,6 +114,20 @@
     "clarify": true
   },
   {
+    "id": "avatar-casting",
+    "prompt": "I need a brand-new, original AI model face for my lookbook: a woman in her late 20s with a calm, editorial vibe. Write the casting headshot prompt only; do not generate an image yet.",
+    "skill": "avatar",
+    "provider": "none",
+    "writes": {}
+  },
+  {
+    "id": "unique-headshot-alias",
+    "prompt": "/unique-headshot Write a casting headshot prompt for a new, invented man in his 40s. Do not generate an image yet.",
+    "skill": "avatar",
+    "provider": "none",
+    "writes": {}
+  },
+  {
     "id": "template-browse",
     "prompt": "Show me the details and price of my saved Catalog Studio photoshoot. Do not run it.",
     "provider": "none",

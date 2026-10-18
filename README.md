@@ -152,7 +152,7 @@ Astria web-agent sandbox remains supported.
 | **headshots-from-photos** | Professional portraits of the real person in supplied photos |
 | **prompt-writing** | Prompt syntax, parameters and writing effective prompts |
 | **packs-guide** | Templates, categories and photoshoot workflows |
-| **unique-headshot** | Diverse, realistic headshots with explicit model/face-inpainting settings |
+| **avatar** | New, original model faces as diverse, realistic headshots with explicit model/face-inpainting settings |
 | **navigation** | Astria app sitemap |
 | **store-photoshoot** | Store catalog to reusable photoshoot workflow; some steps need CLI/UI |
 | **landing-page-editor** | Edit a workspace's landing HTML through optional CLI access |
@@ -160,6 +160,7 @@ Astria web-agent sandbox remains supported.
 | **music-video** | Music-led fashion campaign films from person, garment and location references |
 | **fashion-music-track** | Music tracks for fashion brands, runway shows and campaign films |
 | **artboard** | Legacy alias for Storyboard |
+| **unique-headshot** | Legacy alias for Avatar |
 
 ## Development and rollout
 
