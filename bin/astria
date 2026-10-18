@@ -35,7 +35,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
-VERSION = "1.22.0"
+VERSION = "1.23.0"
 
 
 def _platform_token():
@@ -136,6 +136,7 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                  'result': {'object': {'default': ['default', 'gemini'],
                                        'model_selection_guidance': ['model_selection_guidance', None],
                                        'default_video_model': ['default_video_model', None],
+                                       'default_video_model_family': ['default_video_model_family', None],
                                        'models': ['models', {}],
                                        'video_models': ['video_models', {}],
                                        'video_model_families': ['video_model_families', {}],
@@ -143,8 +144,8 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                        'music_models': ['music_models', {}]},
                             'sections': {'argument': 'type',
                                          'keys': {'image': ['default', 'model_selection_guidance', 'models'],
-                                                  'video': ['default_video_model', 'video_models',
-                                                            'video_model_families'],
+                                                  'video': ['default_video_model', 'default_video_model_family',
+                                                            'video_models', 'video_model_families'],
                                                   'music': ['default_music_model', 'music_models']}},
                             'constants': {'note': 'this is the curated set of popular models only — any '
                                                   '--model also accepts a raw tune id directly. Browse every '
@@ -231,6 +232,7 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                     'target': 'form',
                     'result': {'first': True},
                     'model': {'argument': 'model', 'output': 'model_id'},
+                    'catalog_defaults': {'video_model': 'default_video_model_family'},
                     'references': {'argument': 'references',
                                    'model': 'model_id',
                                    'texts': ['text', 'video_prompt']},
@@ -464,6 +466,7 @@ def execute_api_operation(name, args, cfg, *, extra_fields=None):
         values[model["output"]] = (values.get(model["fallback_argument"])
             if "fallback_argument" in model and not values.get(model["argument"])
             else resolve_model(cfg, values.get(model["argument"]), model.get("catalog", MODEL_CATALOG)))
+    apply_catalog_defaults(cfg, definition, values)
     if "requires_present" in definition and not any(values.get(key) is not None for key in definition["requires_present"]):
         raise AstriaError("Provide at least one of: " + ", ".join(definition["requires_present"]))
     fields = operation_fields(name, values) + (extra_fields or [])
@@ -616,8 +619,8 @@ def load_models_cache():
 def models_cache_stale(record, cfg):
     if not record or not record.get("models"):
         return True
-    # caches written before music models were recorded lack the key entirely
-    if "music_models" not in record:
+    # caches written before music models / the video family default were recorded lack the key entirely
+    if "music_models" not in record or "default_video_model_family" not in record:
         return True
     if record.get("base_url") != base_url(cfg):
         return True
@@ -639,6 +642,7 @@ def fetch_models(cfg):
         "default": payload.get("default", "gemini"),
         "model_selection_guidance": payload.get("model_selection_guidance"),
         "default_video_model": payload.get("default_video_model"),
+        "default_video_model_family": payload.get("default_video_model_family"),
         "models": payload["models"],
         "video_models": payload.get("video_models") or {},
         "video_model_families": payload.get("video_model_families") or {},
@@ -818,6 +822,15 @@ def model_catalog(cfg):
 
 # (catalog section, its default key) in /cli/models; songs use ("music_models", "default_music_model")
 MODEL_CATALOG = ("models", "default")
+
+
+def apply_catalog_defaults(cfg, definition, values):
+    """Fill omitted arguments from catalog keys, e.g. video_model from default_video_model_family."""
+    for argument, key in definition.get("catalog_defaults", {}).items():
+        if values.get(argument) is None:
+            values[argument] = model_catalog(cfg).get(key)
+            if values[argument] is None:
+                die(f"the model catalog has no {key} — run `astria models --refresh` or pass --{argument.replace('_', '-')}")
 
 
 def resolve_model(cfg, name, catalog_keys=MODEL_CATALOG):
@@ -1398,6 +1411,7 @@ def _generate(args, cfg, video):
             resolved[argument] = uploaded
     reference_mentions = create_reference_mentions(args, cfg, tune_id, reference_specs, resolved_media[:len(reference_images)])
     values = vars(args).copy()
+    apply_catalog_defaults(cfg, definition, values)
     values["model_id"] = tune_id
     for text_argument in definition["references"]["texts"]:
         values[text_argument] = prepend_reference_mentions(getattr(args, text_argument), reference_mentions)
@@ -2333,7 +2347,7 @@ def cmd_session_hook(args, cfg):
 def image_model_help(rec, prefix="model name or tune id"):
     models = rec.get("models") or {}
     if not models:
-        return f"{prefix}; see 'astria models', omit for the platform default"
+        return f"{prefix}; see 'astria models --type image', omit for the platform default"
     names = ", ".join(
         f"{name} (default)" if meta.get("default") or name == rec.get("default") else name
         for name, meta in models.items())
@@ -2343,7 +2357,7 @@ def image_model_help(rec, prefix="model name or tune id"):
 def music_model_help(rec):
     models = rec.get("music_models") or {}
     if not models:
-        return "music model name or tune id; see 'astria models' music_models, omit for the default"
+        return "music model name or tune id; see 'astria models --type music', omit for the default"
     names = ", ".join(f"{name} (default)" if name == rec.get("default_music_model") else name for name in models)
     return f"music model name or tune id — {names}; omit for the default"
 
@@ -2353,32 +2367,33 @@ def lyrics_help(rec):
             "omit to let the model write them")
     limits = [f"{name}: {meta['lyrics_length']['min']}-{meta['lyrics_length']['max']} chars"
               for name, meta in (rec.get("music_models") or {}).items()]
-    return f"{base} — {'; '.join(limits)}" if limits else f"{base}; see 'astria models' music_models for lengths and tags"
+    return f"{base} — {'; '.join(limits)}" if limits else f"{base}; see 'astria models --type music' for lengths and tags"
 
 
 def resolution_help(rec, noun="output resolution"):
     res = sorted({r for meta in (rec.get("models") or {}).values()
                   for r in (meta.get("resolutions") or [])})
     if not res:
-        return f"{noun}; see 'astria models' for per-model supported values"
+        return f"{noun}; see 'astria models --type image' for per-model supported values"
     return (f"{noun}, model-dependent — " + ", ".join(res)
-            + "; see 'astria models' for each model's set")
+            + "; see 'astria models --type image' for each model's set")
 
 
 def video_model_help(rec):
     families = rec.get("video_model_families") or {}
     if not families:
         return ("video model family, e.g. seedance25 (pick its resolution with --video-resolution); "
-                "see 'astria models' for the list")
+                "see 'astria models --type video' for the list, omit for the catalog default")
     return ("video model family (pick its resolution with --video-resolution; variant ids such as "
-            "seedance25_720p also work) — " + ", ".join(families))
+            "seedance25_720p also work) — " + ", ".join(families)
+            + f"; omit for {rec.get('default_video_model_family') or 'the catalog default'}")
 
 
 def video_resolution_help(rec):
     families = rec.get("video_model_families") or {}
     listed = [f"{name}: {'/'.join(meta['resolutions'])}" for name, meta in families.items() if meta.get("resolutions")]
     base = "output resolution for --video-model, e.g. 720p; omit for the family default"
-    return f"{base} — {'; '.join(listed)}" if listed else f"{base}; see 'astria models' for each family's set"
+    return f"{base} — {'; '.join(listed)}" if listed else f"{base}; see 'astria models --type video' for each family's set"
 
 
 def video_capability_help(rec, flag, base):
@@ -2560,7 +2575,7 @@ def build_parser(models_record=None):
     )
     p.add_argument("--model", default=None, help=image_model_help(models_record, "first-frame image model"))
     p.add_argument("--text", help="first-frame prompt text")
-    p.add_argument("--video-model", required=True, help=video_model_help(models_record))
+    p.add_argument("--video-model", help=video_model_help(models_record))
     p.add_argument("--video-resolution", help=video_resolution_help(models_record))
     p.add_argument("--video-prompt", required=True,
                    help="motion / action description; references use <faceid:TUNE_ID:1> TUNE_NAME")
@@ -2890,9 +2905,9 @@ OPERATION_DESCRIPTIONS = {
     'list_references': 'Use this when finding a saved person, model, garment, product, or SKU for consistent photos, virtual try-on, headshots, or video. Search title/product name/SKU; gallery=true finds public model references. Returns reusable reference IDs and subject classes. Does not create references or generate media; inspect a selected match with get_reference.',
     'get_reference': 'Use this when inspecting a selected Astria identity or product reference and its training images before a photoshoot or try-on. Returns the saved subject class and reference details. A reference token uses <model_type:ID:1> followed by that class. Does not create or alter the reference.',
     'create_reference': 'Use this when a supplied person or product needs one reusable Astria reference for consistent headshots, virtual try-on, product shots, or multiple scenes. Provide real HTTPS photo URLs, a subject class in name, and a human label in title. Reuse an existing reference when available. Creates paid content only within the requested generation/reference scope; requires an idempotency_key. Returns the new reference ID and class; reuse them across generations. Does not return a finished photoshoot.',
-    'generate_images': 'Use this when the user asks to create or edit images: product photography, ecommerce packshots, on-model fashion/virtual try-on, lookbooks, professional headshots from supplied photos, or consistent people/products across scenes. Reference tokens in text preserve selected subjects; input_image edits an existing HTTPS image, and mask_image limits an edit. Separate scene briefs need separate submissions; num_images varies one brief. Respect an explicitly chosen provider. Prompt advice or a text-only storyboard is not a generation request. Creates paid Astria content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for finished assets or errors without resubmitting.',
-    'generate_video': 'Use this when the user requests an Astria video, animating a photo/product, or motion with consistent person/product references. Provide video_model (a family from list_models video_model_families), an optional video_resolution from that family, and video_prompt; generate_audio=true picks the audio output of families that offer one. Use first_frame/last_frame for image-led video and input_video/audio_reference only when the chosen model supports them. Discover current capabilities with list_models type=video. Do not call for storyboard writing, prompt advice, or an explicitly chosen other provider. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for final video assets or errors without resubmitting.',
-    'generate_music': 'Use this when the user asks for an Astria song, jingle, soundtrack, background music or instrumental track. Provide text as the song description (genre, mood, instruments, vocals, tempo); pass lyrics with the model\'s section tags such as [Verse] and [Chorus] to sing given words, omit lyrics to let the model write them, or set instrumental=true for no vocals. model is a music_models name from list_models type=music and defaults to default_music_model; it also lists lyrics length limits, section tags and the price of each kind of song. Do not call for lyric writing or music advice alone, or for a video soundtrack (use generate_video generate_audio). Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id; check get_prompt for the finished audio or errors without resubmitting.',
+    'generate_images': 'Use this when the user asks to create or edit images: product photography, ecommerce packshots, on-model fashion/virtual try-on, lookbooks, professional headshots from supplied photos, or consistent people/products across scenes. Reference tokens in text preserve selected subjects; input_image edits an existing HTTPS image, and mask_image limits an edit. Separate scene briefs need separate submissions; num_images varies one brief. model is optional: omit it for the catalog default image model, and call list_models type=image only to choose another model or check resolutions. Respect an explicitly chosen provider. Prompt advice or a text-only storyboard is not a generation request. Creates paid Astria content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for finished assets or errors without resubmitting.',
+    'generate_video': 'Use this when the user requests an Astria video, animating a photo/product, or motion with consistent person/product references. Provide video_prompt. video_model (a video_model_families name) and video_resolution are optional: omitted, they use default_video_model_family at its default resolution; call list_models type=video only to choose another model or check its capabilities. generate_audio=true picks the audio output of families that offer one. Use first_frame/last_frame for image-led video and input_video/audio_reference only when the chosen model supports them. Do not call for storyboard writing, prompt advice, or an explicitly chosen other provider. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for final video assets or errors without resubmitting.',
+    'generate_music': 'Use this when the user asks for an Astria song, jingle, soundtrack, background music or instrumental track. Provide text as the song description (genre, mood, instruments, vocals, tempo); pass lyrics with the model\'s section tags such as [Verse] and [Chorus] to sing given words, omit lyrics to let the model write them, or set instrumental=true for no vocals. model is optional and defaults to default_music_model; call list_models type=music to choose another music model or check lyrics length limits, section tags and the price of each kind of song. Do not call for lyric writing or music advice alone, or for a video soundtrack (use generate_video generate_audio). Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id; check get_prompt for the finished audio or errors without resubmitting.',
     'list_prompts': 'Use this when finding recent Astria images/videos, checking existing submissions after an uncertain response, or locating outputs from a saved photoshoot run. Filter by reference, template, order, text, review status, source, or media type. Does not generate or charge credits. Results include prompt IDs and tune IDs for get_prompt; expand prompt.comments to inspect review feedback.',
     'get_prompt': 'Use this when checking progress, finished images/videos, or errors for an existing Astria generation. Pass both its returned id and tune_id (as tune). Returns the current prompt and available assets with an embedded preview; no generation is submitted or charged. Pending or failed results must not be treated as a new generation request. expand prompt.comments includes image review feedback.',
     'list_templates': 'Use this when finding an existing reusable Astria photoshoot/template (also called a pack) for product images, lookbooks, or headshots. Returns accessible template names/slugs; inspect a selected template with get_template before run_template. Browsing does not run a photoshoot or spend credits.',
@@ -2933,6 +2948,13 @@ DESTRUCTIVE_OPERATIONS = {
 }
 
 
+def mcp_help(parser, text):
+    """CLI help in MCP terms: 'astria models --type X' is list_models type=X, --flag-name its argument."""
+    text = re.sub(r"'astria models(?: --type (\w+))?'", lambda m: "list_models" + (f" type={m[1]}" if m[1] else ""), text)
+    flags = {option: action.dest for action in parser._actions for option in action.option_strings}
+    return re.sub(r"--[a-z][a-z-]*", lambda m: flags.get(m[0], m[0]), text)
+
+
 def operation_catalog():
     validate_operation_coverage()
     tools = []
@@ -2950,9 +2972,9 @@ def operation_catalog():
             if isinstance(action, argparse._AppendAction):
                 spec = {"type": "array", "items": spec}
             if action.help and action.help != argparse.SUPPRESS:
-                spec["description"] = action.help.replace("%(default)s", str(action.default))
+                spec["description"] = mcp_help(parser, action.help.replace("%(default)s", str(action.default)))
             if action.dest in JSON_ARGUMENT_SCHEMAS:
-                spec = JSON_ARGUMENT_SCHEMAS[action.dest].copy() | {"description": action.help}
+                spec = JSON_ARGUMENT_SCHEMAS[action.dest].copy() | {"description": mcp_help(parser, action.help)}
             properties[action.dest] = spec
             if action.required or not action.option_strings:
                 required.append(action.dest)
