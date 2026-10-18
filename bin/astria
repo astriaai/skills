@@ -35,7 +35,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
-VERSION = "1.23.0"
+VERSION = "1.24.0"
 
 
 def _platform_token():
