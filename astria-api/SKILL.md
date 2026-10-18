@@ -33,13 +33,16 @@ the CLI and are authoritative for accepted parameters.
 
 ## Connection and transport
 
-The plugin declares `https://mcp.astria.ai/mcp`. Compatible hosts register
-their public OAuth client automatically through DCR. The host handles OAuth login,
-credential storage and refresh. If authentication is required, direct the user
-to the host's Astria connection/login flow; do not ask for API keys or read
-local credentials. Use `get_profile` to identify the connected account.
+Astria's MCP endpoint is `https://mcp.astria.ai/mcp`. The MCP-backed package
+declares it; the skills-only package needs a separate host connection.
+The host handles OAuth login, credential storage and refresh. Use `get_profile`
+to identify the connected account; do not ask for API keys or read credentials.
 
-If tools are absent, check the host's connection settings before proceeding.
+If tools are absent or need authentication, follow
+[MCP setup](references/mcp-setup.md). On a local Codex host, perform the setup
+commands for the user and hand over only the OAuth sign-in/consent step.
+Check for an existing connection before adding one. Text-only advice and
+storyboarding do not require connection setup.
 Do not silently substitute the CLI after an MCP login or connection error.
 The Astria web-agent sandbox may intentionally expose only an authenticated
 CLI; in that environment use [references/cli.md](references/cli.md).

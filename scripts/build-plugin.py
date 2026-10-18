@@ -16,11 +16,12 @@ ROOT = Path(__file__).resolve().parent.parent
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output_directory", nargs="?", type=Path, default=ROOT / "dist")
-    parser.add_argument("--target", choices=("openai", "claude", "grok", "marketplace"), default="openai")
+    parser.add_argument("--target", choices=("openai", "openai-skills-only", "claude", "grok", "marketplace"), default="openai")
     args = parser.parse_args()
     output_directory = args.output_directory.resolve()
     targets = {
         "openai": ("astria", "plugin.json"),
+        "openai-skills-only": ("astria-skills-only", "plugin.json"),
         "claude": ("astria-claude", ".claude-plugin/plugin.json"),
         "grok": ("astria-grok", ".grok-plugin/plugin.json"),
         "marketplace": ("astria-marketplace", "plugins/astria/plugin.json"),
@@ -29,7 +30,8 @@ def main():
     marketplace_root = ROOT / "dist" / "marketplace"
     if output_directory == marketplace_root or marketplace_root in output_directory.parents:
         parser.error("output directory must be outside the generated marketplace")
-    plugin_root = marketplace_root if args.target == "marketplace" else marketplace_root / "plugins" / prefix
+    plugin_name = "astria" if args.target == "openai-skills-only" else prefix
+    plugin_root = marketplace_root if args.target == "marketplace" else marketplace_root / "plugins" / plugin_name
 
     subprocess.run([sys.executable, str(ROOT / "scripts" / "sync-plugin.py")], check=True)
 
@@ -44,10 +46,24 @@ def main():
             if not path.is_file():
                 continue
             relative = path.relative_to(plugin_root).as_posix()
+            if args.target == "openai-skills-only" and relative in ("mcp.json", ".mcp.json"):
+                continue
             info = zipfile.ZipInfo(relative, date_time=(2020, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = (path.stat().st_mode & 0xFFFF) << 16
             payload = path.read_bytes()
+            if args.target == "openai-skills-only" and path.name == "plugin.json":
+                metadata = json.loads(payload)
+                metadata.pop("mcpServers", None)
+                metadata["description"] = "Astria creative skills with agent-assisted local MCP setup. Connect an Astria account through your host to generate images and videos."
+                if relative == "plugin.json":
+                    settings = metadata["extensions"]["com.openai"]
+                    settings.pop("review", None)
+                    settings["publication"]["release_notes"] = "Updated creative skills and agent-assisted MCP setup for local Codex hosts. This skills-only package preserves the existing Astria listing; account connection is separate."
+                    settings["interface"]["longDescription"] = metadata["description"]
+                elif relative == ".codex-plugin/plugin.json":
+                    metadata["interface"]["longDescription"] = metadata["description"]
+                payload = (json.dumps(metadata, indent=2) + "\n").encode("utf-8")
             if args.target == "openai" and relative == "plugin.json":
                 metadata = json.loads(payload)
                 metadata["name"] = "astria-mcp"
