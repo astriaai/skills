@@ -117,9 +117,9 @@ astria prompts list --tune-id 123              # prompts for one tune
 astria prompts list --liked --is-video         # liked video prompts
 astria prompts list --today --limit 100        # prompts created today
 astria prompts list --text "white background" --limit 100 --offset 0
-astria prompts get 555 --model nano-banana-pro       # one prompt (needs its tune/model)
-astria prompts update 555 --model nano-banana-pro --pack-id 88   # assign a prompt to a pack
-astria prompts update 555 --model nano-banana-pro --base-pack-id 88   # bind as a pack one-off (board frame)
+astria prompts get 555                               # one prompt
+astria prompts update 555 --pack-id 88   # assign a prompt to a pack
+astria prompts update 555 --base-pack-id 88   # bind as a pack one-off (board frame)
 ```
 
 - `prompts list` filters: `--pack-id`, `--base-pack-id`, `--tune-id`,
@@ -132,8 +132,8 @@ Request image comments with the repeatable `--expand` option:
 
 ```bash
 astria prompts list -w 17 --expand prompt.comments --limit 100
-astria prompts get 555 -w 17 --tune 123 --expand prompt.comments
-astria prompts get 555 -w 17 --tune 123 --expand comments --expand prompt.debug_images
+astria prompts get 555 -w 17 --expand prompt.comments
+astria prompts get 555 -w 17 --expand comments --expand prompt.debug_images
 astria api GET /prompts -w 17 --query 'expand[]=prompt.comments'
 astria api GET /tunes/123/prompts/555 -w 17 --query 'expand[]=comments'
 ```
@@ -353,7 +353,7 @@ Packs are surfaced in the Astria GUI as **Templates** — "pack" and "template" 
 astria packs list
 astria packs get spring-lookbook
 astria packs create --title "Spring Lookbook"
-astria prompts update 555 --model nano-banana-pro --pack-id 88   # add a prompt to the pack
+astria prompts update 555 --pack-id 88   # add a prompt to the pack
 ```
 
 ## Pricing

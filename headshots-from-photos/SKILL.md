@@ -45,7 +45,7 @@ casting prompt. Do not infer protected attributes from the identity photos.
 
 ## Deliver
 
-Retain returned prompt/tune IDs and check `get_prompt` for each requested output.
+Retain returned prompt IDs and check `get_prompt` for each requested output.
 Present completed images and report pending or failed portraits accurately.
 When inspection is available, check resemblance, natural facial proportions,
 and framing. Report an identity mismatch without claiming an exact likeness

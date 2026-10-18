@@ -275,11 +275,10 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                         'prompt.comments': ['comments']}},
                   'path_choice': ['tune_id', '/tunes/{tune_id}/prompts']},
  'get_prompt': {'method': 'GET',
-                'path': '/tunes/{model_id}/prompts/{id}',
+                'path': '/prompts/{id}',
                 'fields': [['expand[]', 'expand', 'array']],
                 'target': 'query',
-                'result': {},
-                'model': {'argument': 'model', 'output': 'model_id', 'fallback_argument': 'tune'}},
+                'result': {}},
  'list_templates': {'method': 'GET',
                     'path': '/packs',
                     'fields': [['limit', 'limit', 'truthy'], ['offset', 'offset', 'truthy']],
@@ -322,10 +321,9 @@ API_OPERATIONS.update({
     "update_reference": {"method": "PATCH", "path": "/tunes/{id}", "target": "json_body", "root": "tune",
         "fields": [["title", "title", "value"], ["name", "name", "value"], ["characteristics", "description", "description_object"],
             ["sources", "sources", "json"]], "result": {}, "requires_present": ["title", "name", "description", "sources"]},
-    "update_prompt": {"method": "PATCH", "path": "/prompts/{id}", "path_choice": ["model_id", "/tunes/{model_id}/prompts/{id}"], "target": "json_body", "root": "prompt",
+    "update_prompt": {"method": "PATCH", "path": "/prompts/{id}", "target": "json_body", "root": "prompt",
         "fields": [["pack_id", "pack_id", "nullable_id"], ["base_pack_id", "base_pack_id", "nullable_id"],
-            ["workspace_id", "workspace_id", "nullable_id"]],
-        "model": {"argument": "model", "output": "model_id", "fallback_argument": "tune"}, "result": {},
+            ["workspace_id", "workspace_id", "nullable_id"]], "result": {},
         "requires_present": ["pack_id", "base_pack_id", "workspace_id"]},
 })
 API_OPERATIONS["run_template"]["fields"].append(["tune[tune_replacements]", "tune_replacements", "replacements"])
@@ -463,9 +461,7 @@ def execute_api_operation(name, args, cfg, *, extra_fields=None):
     values = vars(args).copy()
     if "model" in definition:
         model = definition["model"]
-        values[model["output"]] = (values.get(model["fallback_argument"])
-            if "fallback_argument" in model and not values.get(model["argument"])
-            else resolve_model(cfg, values.get(model["argument"]), model.get("catalog", MODEL_CATALOG)))
+        values[model["output"]] = resolve_model(cfg, values.get(model["argument"]), model.get("catalog", MODEL_CATALOG))
     apply_catalog_defaults(cfg, definition, values)
     if "requires_present" in definition and not any(values.get(key) is not None for key in definition["requires_present"]):
         raise AstriaError("Provide at least one of: " + ", ".join(definition["requires_present"]))
@@ -2494,15 +2490,11 @@ def build_parser(models_record=None):
     p.set_defaults(func=cmd_prompts_list)
     p = prompts.add_parser("get", parents=[ws_parent], help="get one prompt")
     p.add_argument("id")
-    p.add_argument("--tune", help="tune id the prompt belongs to")
-    p.add_argument("--model", help="model name instead of --tune")
     p.add_argument("--expand", action="append", choices=["debug_images", "prompt.debug_images", "comments", "prompt.comments"],
                    help="expand a prompt field, e.g. debug_images (repeatable)")
     p.set_defaults(func=cmd_prompts_get)
     p = prompts.add_parser("update", parents=[ws_parent], help="update a prompt (assign pack / move workspace)")
     p.add_argument("id")
-    p.add_argument("--tune", help="tune id the prompt belongs to")
-    p.add_argument("--model", help="model name instead of --tune")
     p.add_argument("--pack-id", help="assign as a pack template prompt; use null to clear")
     p.add_argument("--base-pack-id", help="bind as a pack one-off")
     p.add_argument("--workspace-id")
@@ -2908,11 +2900,11 @@ OPERATION_DESCRIPTIONS = {
     'generate_images': 'Use this when the user asks to create or edit images: product photography, ecommerce packshots, on-model fashion/virtual try-on, lookbooks, professional headshots from supplied photos, or consistent people/products across scenes. Reference tokens in text preserve selected subjects; input_image edits an existing HTTPS image, and mask_image limits an edit. Separate scene briefs need separate submissions; num_images varies one brief. model is optional: omit it for the catalog default image model, and call list_models type=image only to choose another model or check resolutions. Respect an explicitly chosen provider. Prompt advice or a text-only storyboard is not a generation request. Creates paid Astria content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for finished assets or errors without resubmitting.',
     'generate_video': 'Use this when the user requests an Astria video, animating a photo/product, or motion with consistent person/product references. Provide video_prompt. video_model (a video_model_families name) and video_resolution are optional: omitted, they use default_video_model_family at its default resolution; call list_models type=video only to choose another model or check its capabilities. generate_audio=true picks the audio output of families that offer one. Use first_frame/last_frame for image-led video and input_video/audio_reference only when the chosen model supports them. Do not call for storyboard writing, prompt advice, or an explicitly chosen other provider. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for final video assets or errors without resubmitting.',
     'generate_music': 'Use this when the user asks for an Astria song, jingle, soundtrack, background music or instrumental track. Provide text as the song description (genre, mood, instruments, vocals, tempo); pass lyrics with the model\'s section tags such as [Verse] and [Chorus] to sing given words, omit lyrics to let the model write them, or set instrumental=true for no vocals. model is optional and defaults to default_music_model; call list_models type=music to choose another music model or check lyrics length limits, section tags and the price of each kind of song. Do not call for lyric writing or music advice alone, or for a video soundtrack (use generate_video generate_audio). Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id; check get_prompt for the finished audio or errors without resubmitting.',
-    'list_prompts': 'Use this when finding recent Astria images/videos, checking existing submissions after an uncertain response, or locating outputs from a saved photoshoot run. Filter by reference, template, order, text, review status, source, or media type. Does not generate or charge credits. Results include prompt IDs and tune IDs for get_prompt; expand prompt.comments to inspect review feedback.',
-    'get_prompt': 'Use this when checking progress, finished images/videos, or errors for an existing Astria generation. Pass both its returned id and tune_id (as tune). Returns the current prompt and available assets with an embedded preview; no generation is submitted or charged. Pending or failed results must not be treated as a new generation request. expand prompt.comments includes image review feedback.',
+    'list_prompts': 'Use this when finding recent Astria images/videos, checking existing submissions after an uncertain response, or locating outputs from a saved photoshoot run. Filter by reference, template, order, text, review status, source, or media type. Does not generate or charge credits. Results include prompt IDs for get_prompt; expand prompt.comments to inspect review feedback.',
+    'get_prompt': 'Use this when checking progress, finished images/videos, or errors for an existing Astria generation. Pass its returned id. Returns the current prompt and available assets with an embedded preview; no generation is submitted or charged. Pending or failed results must not be treated as a new generation request. expand prompt.comments includes image review feedback.',
     'list_templates': 'Use this when finding an existing reusable Astria photoshoot/template (also called a pack) for product images, lookbooks, or headshots. Returns accessible template names/slugs; inspect a selected template with get_template before run_template. Browsing does not run a photoshoot or spend credits.',
     'get_template': 'Use this when resolving a selected Astria photoshoot template by slug or ID before running it or inspecting its prompts, reference slots, and baseline pricing. Does not generate images or modify the template. Preserve the returned reference-slot order when calling run_template.',
-    'run_template': 'Use this when the user asks to run a saved Astria photoshoot/template on their person or product, repeat an existing lookbook with a new SKU, or generate portraits from a selected pack. Resolve the template and reference slots first with get_template; pass tune_id entries in slot order, supported photo inputs, or tune_replacements mapping original IDs to replacement ID arrays to swap selected products while retaining other references. Do not substitute one generic image for a requested template run, and do not run a template for browsing or pricing advice. Creates paid Astria content within the requested scope; requires an idempotency_key. Returns the submitted order/prompt IDs; use list_prompts to find tune IDs and get_prompt to check outputs without rerunning.',
+    'run_template': 'Use this when the user asks to run a saved Astria photoshoot/template on their person or product, repeat an existing lookbook with a new SKU, or generate portraits from a selected pack. Resolve the template and reference slots first with get_template; pass tune_id entries in slot order, supported photo inputs, or tune_replacements mapping original IDs to replacement ID arrays to swap selected products while retaining other references. Do not substitute one generic image for a requested template run, and do not run a template for browsing or pricing advice. Creates paid Astria content within the requested scope; requires an idempotency_key. Returns the submitted order/prompt IDs; use list_prompts to find prompt IDs and get_prompt to check outputs without rerunning.',
 }
 
 
@@ -2981,8 +2973,6 @@ def operation_catalog():
         # These flags are validated by their handlers in terminal use.
         if name == "generate_images":
             required.append("text")
-        if name == "get_prompt":
-            required.append("tune")
         if name == "create_reference":
             required.append("image_url")
         if not readonly:
@@ -3019,8 +3009,6 @@ def operation_contract():
             covered.update(re.findall(r"\{([^}]+)\}", definition["path_choice"][1]))
         if "model" in definition:
             covered.add(definition["model"]["argument"])
-            if "fallback_argument" in definition["model"]:
-                covered.add(definition["model"]["fallback_argument"])
         if "references" in definition:
             covered.add(definition["references"]["argument"])
         if "sections" in definition["result"]:

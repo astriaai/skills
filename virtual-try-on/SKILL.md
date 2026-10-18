@@ -47,7 +47,7 @@ these same references; do not silently deliver still images instead.
 
 ## Finish the set
 
-Check every returned prompt with `get_prompt` using its ID and tune ID. Present
+Check every returned prompt with `get_prompt` using its ID. Present
 the requested completed assets and clearly identify failures or pending work.
 When inspection is available, compare identity, garment details, and placement
 with the sources. Do not claim exact fit or submit unrequested correction jobs.

@@ -73,9 +73,9 @@ OAuth credentials belong to the host, not the bundled CLI.
   text. Use returned IDs/URLs rather than guessing them.
 
 Generation returns a submitted prompt, not finished media. Save its `id` and
-`tune_id`; query `get_prompt` with `id` and `tune` (the returned `tune_id`).
+query `get_prompt` with that `id`.
 For template runs returning `prompt_ids`, use `list_prompts` with `order_id`
-or `base_pack_id` to locate each prompt and its tune. Check `user_error` and
+or `base_pack_id` to locate each prompt. Check `user_error` and
 available assets; report pending work accurately without resubmitting.
 
 If the host supports MCP events, it can subscribe to `prompt.completed` and
@@ -193,14 +193,14 @@ Rendered video assets can be in `images[]` with `content_type=video/mp4`.
 
 `list_prompts` filters recent work, templates (`pack_id`), generated template
 work (`base_pack_id`/`order_id`), tune (`tune_id`), text and liked/video status.
-`get_prompt` requires both `id` and `tune`. Use
+`get_prompt` takes only the prompt `id`. Use
 `expand: ["prompt.comments"]` on either tool to include image review comments;
 `"comments"` is an alias. Comments are a flat oldest-first array including
 resolved entries. Associate images by `blob_id`/`attachment_id`; `resolved_at`
 identifies resolved comments. Without expansion, comments are omitted.
 
 ```json
-{"tool":"get_prompt","arguments":{"id":"555","tune":"123","workspace":"17","expand":["prompt.comments"]}}
+{"tool":"get_prompt","arguments":{"id":"555","workspace":"17","expand":["prompt.comments"]}}
 ```
 
 ## Templates (packs) and pricing

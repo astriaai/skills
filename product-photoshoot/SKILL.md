@@ -45,7 +45,7 @@ while varying only the requested setting, angle, lighting, or styling.
 
 ## Deliver and review
 
-Retain each returned prompt ID and tune ID, and check `get_prompt` for completion.
+Retain each returned prompt ID and check `get_prompt` for completion.
 Show all requested finished assets through the host's result presentation;
 identify pending or failed shots accurately. Check visible product details
 against the source when images can be inspected. Report material mismatches;
