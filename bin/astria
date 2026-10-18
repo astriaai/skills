@@ -35,7 +35,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
-VERSION = "1.20.1"
+VERSION = "1.21.0"
 
 
 def _platform_token():
@@ -138,12 +138,13 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                        'default_video_model': ['default_video_model', None],
                                        'models': ['models', {}],
                                        'video_models': ['video_models', {}],
-                                       'video_model_families': ['video_model_families', {}]},
+                                       'video_model_families': ['video_model_families', {}],
+                                       'default_music_model': ['default_music_model', None],
+                                       'music_models': ['music_models', {}]},
                             'constants': {'note': 'this is the curated set of popular models only — any '
                                                   '--model also accepts a raw tune id directly. Browse every '
-                                                  'partner model and its tune id at '
-                                                  'astria.ai/gallery/tunes?branch=partner-1 (or run `astria '
-                                                  'tunes list --gallery --branch partner-1`).'},
+                                                  'model and its tune id at astria.ai/gallery/tunes (or run '
+                                                  '`astria tunes list --gallery`).'},
                             'choices': {'source': ['builtin', 'built-in (offline)', 'server']}},
                  'no_workspace': True,
                  'auth': False},
@@ -232,6 +233,16 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                     'input': 'input_image',
                                     'edit': 1,
                                     'generate': 2}},
+ 'generate_music': {'method': 'POST',
+                    'path': '/tunes/{model_id}/prompts',
+                    'fields': [['prompt[text]', 'text', 'value'],
+                               ['prompt[lyrics]', 'lyrics', 'truthy'],
+                               ['prompt[instrumental]', 'instrumental', 'flag'],
+                               ['prompt[num_images]', 'num_images', 'value']],
+                    'target': 'form',
+                    'result': {'first': True},
+                    'model': {'argument': 'model', 'output': 'model_id',
+                              'catalog': ['music_models', 'default_music_model']}},
  'list_prompts': {'method': 'GET',
                   'path': '/prompts',
                   'fields': [[name + ('[]' if spec['mode'] == 'array' else ''), name, spec['mode']]
@@ -445,7 +456,7 @@ def execute_api_operation(name, args, cfg, *, extra_fields=None):
         model = definition["model"]
         values[model["output"]] = (values.get(model["fallback_argument"])
             if "fallback_argument" in model and not values.get(model["argument"])
-            else resolve_model(cfg, values.get(model["argument"])))
+            else resolve_model(cfg, values.get(model["argument"]), model.get("catalog", MODEL_CATALOG)))
     if "requires_present" in definition and not any(values.get(key) is not None for key in definition["requires_present"]):
         raise AstriaError("Provide at least one of: " + ", ".join(definition["requires_present"]))
     fields = operation_fields(name, values) + (extra_fields or [])
@@ -598,6 +609,9 @@ def load_models_cache():
 def models_cache_stale(record, cfg):
     if not record or not record.get("models"):
         return True
+    # caches written before music models were recorded lack the key entirely
+    if "music_models" not in record:
+        return True
     if record.get("base_url") != base_url(cfg):
         return True
     return time.time() - record.get("fetched_at", 0) > record.get("ttl", MODELS_TTL_DEFAULT)
@@ -621,6 +635,8 @@ def fetch_models(cfg):
         "models": payload["models"],
         "video_models": payload.get("video_models") or {},
         "video_model_families": payload.get("video_model_families") or {},
+        "default_music_model": payload.get("default_music_model"),
+        "music_models": payload.get("music_models") or {},
         "cli": payload.get("cli") or {},
         "skills": payload.get("skills") or {},
     }
@@ -793,14 +809,21 @@ def model_catalog(cfg):
     }
 
 
-def resolve_model(cfg, name):
-    """Map a model name (gemini/seedream/...) or a raw tune id to a tune id."""
+# (catalog section, its default key) in /cli/models; songs use ("music_models", "default_music_model")
+MODEL_CATALOG = ("models", "default")
+
+
+def resolve_model(cfg, name, catalog_keys=MODEL_CATALOG):
+    """Map a model name (gemini/seedream/mureka-v9.5/...) or a raw tune id to a tune id."""
+    models_key, default_key = catalog_keys
     catalog = None
-    if name is None:
+    if name is None and catalog_keys == MODEL_CATALOG:
         name = cfg.get("default_model")
     if name is None:
         catalog = model_catalog(cfg)
-        name = catalog.get("default", "gemini")
+        name = catalog.get(default_key)
+        if name is None:
+            die(f"the model catalog has no {default_key} — run `astria models --refresh` or pass --model")
     if str(name).isdigit():
         return str(name)
     key = str(name).lower()
@@ -813,7 +836,7 @@ def resolve_model(cfg, name):
     # 3. the server catalog (cached daily)
     if catalog is None:
         catalog = model_catalog(cfg)
-    entry = catalog.get("models", {}).get(key)
+    entry = catalog.get(models_key, {}).get(key)
     if entry and entry.get("tune_id"):
         return str(entry["tune_id"])
     # 4. built-in offline fallback
@@ -1395,6 +1418,13 @@ def cmd_video(args, cfg):
     if getattr(args, "input_image", None):
         die("--input-image is for image generation/editing. For video, use --first-frame, --last-frame, --input-video, --image-reference, or --reference NAME=PATH_OR_URL.")
     _generate(args, cfg, video=True)
+
+
+def cmd_music(args, cfg):
+    prompt = execute_api_operation("generate_music", args, cfg)
+    if args.wait:
+        prompt = poll_prompt(cfg, prompt["tune_id"], prompt["id"], workspace=args.workspace)
+    emit(prompt)
 
 
 VARIATE_VIDEO_MODEL = "seedance25_720p"
@@ -2303,6 +2333,22 @@ def image_model_help(rec, prefix="model name or tune id"):
     return f"{prefix} — {names}; omit for the default"
 
 
+def music_model_help(rec):
+    models = rec.get("music_models") or {}
+    if not models:
+        return "music model name or tune id; see 'astria models' music_models, omit for the default"
+    names = ", ".join(f"{name} (default)" if name == rec.get("default_music_model") else name for name in models)
+    return f"music model name or tune id — {names}; omit for the default"
+
+
+def lyrics_help(rec):
+    base = ("song lyrics, using the model's section tags such as [Verse] and [Chorus]; "
+            "omit to let the model write them")
+    limits = [f"{name}: {meta['lyrics_length']['min']}-{meta['lyrics_length']['max']} chars"
+              for name, meta in (rec.get("music_models") or {}).items()]
+    return f"{base} — {'; '.join(limits)}" if limits else f"{base}; see 'astria models' music_models for lengths and tags"
+
+
 def resolution_help(rec, noun="output resolution"):
     res = sorted({r for meta in (rec.get("models") or {}).values()
                   for r in (meta.get("resolutions") or [])})
@@ -2510,6 +2556,7 @@ def build_parser(models_record=None):
     p.add_argument("--video-prompt", required=True,
                    help="motion / action description; references use <faceid:TUNE_ID:1> TUNE_NAME")
     p.add_argument("--duration", help="seconds (model-dependent)")
+    p.add_argument("--seed", help="generation seed; reuse a draft's seed to reproduce it at a higher resolution")
     p.add_argument("--aspect-ratio", default="3:4", help="e.g. 3:4, 1:1, 16:9 (default: %(default)s)")
     p.add_argument("--resolution", help=resolution_help(
         models_record, "first-frame image resolution (video resolution is set by --video-resolution)"))
@@ -2533,6 +2580,28 @@ def build_parser(models_record=None):
                        "generate a soundtrack (picks the audio version of families that price it separately); omit for silent"))
     p.add_argument("--wait", action="store_true")
     p.set_defaults(func=cmd_video)
+
+    # music
+    p = sub.add_parser(
+        "music", parents=[ws_parent], help="generate a song",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  # Song with your own lyrics\n"
+            "  astria music \"upbeat synth-pop, female vocals, 120 bpm\" \\\n"
+            "    --lyrics \"[Verse]\\nCity lights are calling\\n[Chorus]\\nWe run all night\" --wait\n\n"
+            "  # Let the model write the lyrics, or make an instrumental\n"
+            "  astria music \"melancholic indie folk about leaving home\"\n"
+            "  astria music \"lo-fi hip hop beat for studying\" --instrumental"
+        ),
+    )
+    p.add_argument("text", help="song description: genre, mood, instruments, vocals and tempo")
+    p.add_argument("--model", default=None, help=music_model_help(models_record))
+    p.add_argument("--lyrics", help=lyrics_help(models_record))
+    p.add_argument("--instrumental", action="store_true", help="make a song without vocals; cannot be combined with lyrics")
+    p.add_argument("--num-images", default="1", help="number of songs to generate (default: %(default)s)")
+    p.add_argument("--wait", action="store_true", help="block until the song is ready")
+    p.set_defaults(func=cmd_music)
 
     p = sub.add_parser(
         "variate", parents=[ws_parent],
@@ -2753,6 +2822,7 @@ OPERATION_POLICIES = {
     "create_reference": (("tunes", "create"), False, {"image"}),
     "generate_images": (("generate",), False, {"wait", "video_prompt"}),
     "generate_video": (("video",), False, {"wait", "input_image"}),
+    "generate_music": (("music",), False, {"wait"}),
     "list_prompts": (("prompts", "list"), True, set()),
     "get_prompt": (("prompts", "get"), True, set()),
     "update_prompt": (("prompts", "update"), False, set()),
@@ -2806,13 +2876,14 @@ OPERATION_DESCRIPTIONS = {
     'update_template': 'Update an existing template title, subtitle or reference categories. Does not generate images or replace its prompts. Inspect get_template before changing its category slots.',
     'update_reference': 'Update a selected reference title, subject class, short description or verified catalog source records. Sources include provider, account_key, resource_type, external_id and captured metadata. Does not retrain the reference or generate images.',
     'update_prompt': 'Assign an existing prompt to a template, clear template membership, or move it to an authorized workspace. Pass pack_id or base_pack_id as the string null to clear that assignment. Does not generate, delete or retry an image.',
-    'list_models': 'Use this when choosing an Astria image or video model or checking supported media inputs, image resolutions, aspect ratios, and defaults. Returns the live model catalog and model names/tune IDs; does not generate media or spend credits. Use the explicit user selection or catalog default for generation.',
+    'list_models': 'Use this when choosing an Astria image, video or music model or checking supported media inputs, image resolutions, aspect ratios, lyrics limits, song prices, and defaults. Returns the live model catalog and model names/tune IDs; does not generate media or spend credits. Use the explicit user selection or catalog default for generation.',
     'list_workspaces': 'Use this when finding an Astria workspace for a team or brand photoshoot. Returns authorized workspace IDs; expand migration to include their website URLs for duplicate detection. Use the selected ID consistently for references, templates, and generations. Does not create a workspace or generate media.',
     'list_references': 'Use this when finding a saved person, model, garment, product, or SKU for consistent photos, virtual try-on, headshots, or video. Search title/product name/SKU; gallery=true finds public model references. Returns reusable reference IDs and subject classes. Does not create references or generate media; inspect a selected match with get_reference.',
     'get_reference': 'Use this when inspecting a selected Astria identity or product reference and its training images before a photoshoot or try-on. Returns the saved subject class and reference details. A reference token uses <model_type:ID:1> followed by that class. Does not create or alter the reference.',
     'create_reference': 'Use this when a supplied person or product needs one reusable Astria reference for consistent headshots, virtual try-on, product shots, or multiple scenes. Provide real HTTPS photo URLs, a subject class in name, and a human label in title. Reuse an existing reference when available. Creates paid content only within the requested generation/reference scope; requires an idempotency_key. Returns the new reference ID and class; reuse them across generations. Does not return a finished photoshoot.',
     'generate_images': 'Use this when the user asks to create or edit images: product photography, ecommerce packshots, on-model fashion/virtual try-on, lookbooks, professional headshots from supplied photos, or consistent people/products across scenes. Reference tokens in text preserve selected subjects; input_image edits an existing HTTPS image, and mask_image limits an edit. Separate scene briefs need separate submissions; num_images varies one brief. Respect an explicitly chosen provider. Prompt advice or a text-only storyboard is not a generation request. Creates paid Astria content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for finished assets or errors without resubmitting.',
     'generate_video': 'Use this when the user requests an Astria video, animating a photo/product, or motion with consistent person/product references. Provide video_model (a family from list_models video_model_families), an optional video_resolution from that family, and video_prompt; generate_audio=true picks the audio output of families that offer one. Use first_frame/last_frame for image-led video and input_video/audio_reference only when the chosen model supports them. Discover current capabilities with list_models. Do not call for storyboard writing, prompt advice, or an explicitly chosen other provider. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for final video assets or errors without resubmitting.',
+    'generate_music': 'Use this when the user asks for an Astria song, jingle, soundtrack, background music or instrumental track. Provide text as the song description (genre, mood, instruments, vocals, tempo); pass lyrics with the model\'s section tags such as [Verse] and [Chorus] to sing given words, omit lyrics to let the model write them, or set instrumental=true for no vocals. model is a music_models name from list_models and defaults to default_music_model; list_models also lists lyrics length limits, section tags and the price of each kind of song. Do not call for lyric writing or music advice alone, or for a video soundtrack (use generate_video generate_audio). Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id; check get_prompt for the finished audio or errors without resubmitting.',
     'list_prompts': 'Use this when finding recent Astria images/videos, checking existing submissions after an uncertain response, or locating outputs from a saved photoshoot run. Filter by reference, template, order, text, review status, source, or media type. Does not generate or charge credits. Results include prompt IDs and tune IDs for get_prompt; expand prompt.comments to inspect review feedback.',
     'get_prompt': 'Use this when checking progress, finished images/videos, or errors for an existing Astria generation. Pass both its returned id and tune_id (as tune). Returns the current prompt and available assets with an embedded preview; no generation is submitted or charged. Pending or failed results must not be treated as a new generation request. expand prompt.comments includes image review feedback.',
     'list_templates': 'Use this when finding an existing reusable Astria photoshoot/template (also called a pack) for product images, lookbooks, or headshots. Returns accessible template names/slugs; inspect a selected template with get_template before run_template. Browsing does not run a photoshoot or spend credits.',
@@ -2845,6 +2916,12 @@ def operation_parser(path):
         if not parser.description:
             parser.description = help_text
     return parser
+
+
+# Updates replace saved metadata or assignments rather than only adding content.
+DESTRUCTIVE_OPERATIONS = {
+    "update_reference", "update_prompt", "update_template", "update_workspace",
+}
 
 
 def operation_catalog():
@@ -2889,7 +2966,7 @@ def operation_catalog():
                             "required": list(dict.fromkeys(required)), "additionalProperties": False},
             "outputSchema": {"type": "object", "properties": {"result": {}},
                              "required": ["result"], "additionalProperties": False},
-            "annotations": {"readOnlyHint": readonly, "destructiveHint": False,
+            "annotations": {"readOnlyHint": readonly, "destructiveHint": name in DESTRUCTIVE_OPERATIONS,
                             "openWorldHint": not readonly},
             "securitySchemes": [{"type": "oauth2", "scopes": []}],
         })
