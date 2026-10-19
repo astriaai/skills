@@ -158,7 +158,10 @@ Astria web-agent sandbox remains supported.
 | **landing-page-editor** | Edit a workspace's landing HTML through optional CLI access |
 | **storyboard** | Text-only cinematic video sequence from a draft or ordered images |
 | **music-video** | Music-led fashion campaign films from person, garment and location references |
+| **motion-design** | Campaigns with physical interaction between performers, typography and graphics |
+| **mux** | Combine video and music, verify synchronization and save the final film |
 | **fashion-music-track** | Music tracks for fashion brands, runway shows and campaign films |
+| **behind-the-scenes** | Candid handheld films from behind the scenes of a fashion shoot |
 | **artboard** | Legacy alias for Storyboard |
 | **unique-headshot** | Legacy alias for Avatar |
 

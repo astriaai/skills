@@ -39,8 +39,5 @@ If the reference prompt or scene is lacking detail or interesting, consider brin
 
 Keep it high paced, with motion. True dynamics of a music video.
 
-# Step 3: Mux
-Wait for the song and the video to finish with `astria prompts wait SONG_PROMPT_ID VIDEO_PROMPT_ID`, then download them. Combine the audio and video using ffmpeg cli. Ensure that the timing of the shots aligns with the beats and mood of the music, and that the visual narrative complements the audio track.
-
-# Save
-Save with `astria images replace VIDEO_PROMPT_ID final.mp4`. The server selects the sole video result automatically, so no blob ID lookup is needed. It replaces that video in the gallery after the muxed upload is validated, retains the original in debug history for one week, and records the source blob ID, user, and timestamp on the final file. If the prompt has multiple videos, select the source with `--blob-id SOURCE_VIDEO_BLOB_ID`, matching `images` to `blob_ids` from `astria prompts get`. In a headless run, deliver the returned url with `show_file`.
+# Step 3: Mux and save
+Follow [MUX](../mux/SKILL.md).
