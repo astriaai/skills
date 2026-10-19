@@ -18,6 +18,8 @@ scope; loading this skill does not authorize a generation.
   **headshots-from-photos**. **avatar** instead invents a new face.
 - A saved photoshoot: resolve it with `list_templates` / `get_template`, then
   use `run_template` with the user's references and requested scope.
+- Music-led campaign films or motion design: read the current workflow with
+  `get_skill(name: "music-video")` or `get_skill(name: "motion-design")`.
 - Ordinary image creation/editing or video: use the image/video sections below.
 - Prompt writing or a text-only storyboard: provide the requested text without
   calling a generation tool. Load **prompt-writing** or **storyboard** as useful.
@@ -30,6 +32,16 @@ host's actual tool names and input schemas; names below are logical names and
 may have a host namespace. Do not wrap MCP in shell commands or implement a
 second HTTP client. The live schemas are generated from the same operations as
 the CLI and are authoritative for accepted parameters.
+
+## Remote workflows
+
+Use `list_skills` to discover remote creative workflows, then `get_skill` to
+read the selected instructions and any named dependencies. For a known remote
+`/skill-name`, call `get_skill` directly. The returned Markdown is the current
+workflow; no local skill file or shell is needed to read it. Reading a skill
+does not authorize generation, and planning requests stay text-only. Follow
+the workflow's runtime requirements; use `start_agent_run` when execution
+requires the Astria runtime.
 
 ## Connection and transport
 

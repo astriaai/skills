@@ -1,4 +1,0 @@
-interface:
-  display_name: "Music Video"
-  short_description: "Direct a music-led fashion campaign film"
-  default_prompt: "Use $music-video to direct a music-led campaign film from my person, garment and location references and brief."
