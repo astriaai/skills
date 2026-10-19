@@ -35,7 +35,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
-VERSION = "1.24.0"
+VERSION = "1.25.0"
 
 
 def _platform_token():
@@ -325,6 +325,15 @@ API_OPERATIONS.update({
         "fields": [["pack_id", "pack_id", "nullable_id"], ["base_pack_id", "base_pack_id", "nullable_id"],
             ["workspace_id", "workspace_id", "nullable_id"]], "result": {},
         "requires_present": ["pack_id", "base_pack_id", "workspace_id"]},
+    # Headless agent runs, reported as A2A tasks. The run id is its chat session id.
+    "start_agent_run": {"method": "POST", "path": "/api/agent_runs", "target": "form",
+        "fields": [["workspace_id", "workspace", "value"], ["message", "message", "value"]], "result": {}},
+    "get_agent_run": {"method": "GET", "path": "/api/agent_runs/{id}", "target": "query", "fields": [], "result": {},
+        "no_workspace": True},
+    "reply_agent_run": {"method": "POST", "path": "/api/agent_runs/{id}/reply", "target": "json_body",
+        "fields": [["tool_call_id", "tool_call_id", "value"], ["answers", "answers", "json"]], "result": {}, "no_workspace": True},
+    "cancel_agent_run": {"method": "POST", "path": "/api/agent_runs/{id}/cancel", "target": "form", "fields": [], "result": {},
+        "no_workspace": True},
 })
 API_OPERATIONS["run_template"]["fields"].append(["tune[tune_replacements]", "tune_replacements", "replacements"])
 API_OPERATIONS["run_template"]["requires_any"].append("tune_replacements")
@@ -338,10 +347,15 @@ JSON_ARGUMENT_SCHEMAS = {
     "tune_replacements": {"type": "object", "propertyNames": {"pattern": "^[1-9][0-9]*$"},
         "additionalProperties": {"type": "array", "minItems": 1,
             "items": {"type": "string", "pattern": "^[1-9][0-9]*$"}}},
+    # As the chat UI answers ask_user: a label per question, or labels for multi-select.
+    "answers": {"type": "object", "additionalProperties": {"anyOf": [
+        {"type": "string", "minLength": 1}, {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}]}},
 }
 
 
 def validate_argument(schema, value):
+    if "anyOf" in schema:
+        return any(validate_argument(option, value) for option in schema["anyOf"])
     kind = schema["type"]
     if kind == "string":
         return (isinstance(value, str) and len(value) >= schema.get("minLength", 0)
@@ -466,7 +480,9 @@ def execute_api_operation(name, args, cfg, *, extra_fields=None):
     if "requires_present" in definition and not any(values.get(key) is not None for key in definition["requires_present"]):
         raise AstriaError("Provide at least one of: " + ", ".join(definition["requires_present"]))
     fields = operation_fields(name, values) + (extra_fields or [])
-    options = {definition["target"]: {definition["root"]: dict(fields)} if definition["target"] == "json_body" else fields}
+    # A JSON body nests its fields under root, or sends them top-level when it has none.
+    body = {definition["root"]: dict(fields)} if "root" in definition else dict(fields)
+    options = {definition["target"]: body if definition["target"] == "json_body" else fields}
     if definition.get("no_workspace"):
         options["no_workspace"] = True
     else:
@@ -1292,6 +1308,16 @@ def cmd_prompts_get(args, cfg):
 def cmd_prompts_update(args, cfg):
     emit(execute_api_operation("update_prompt", args, cfg))
 
+def cmd_prompts_attach(args, cfg):
+    # The Darkroom's save path, optionally replacing one result with a retained original.
+    blob = direct_upload_records(cfg, [args.file])[0]
+    payload = {"blob_signed_id": blob["signed_id"]}
+    if args.replace_blob_id is not None:
+        payload["replace_blob_id"] = args.replace_blob_id
+    elif args.replace:
+        payload["replace"] = True
+    emit(request(cfg, "POST", f"/prompts/{args.id}/images", json_body=payload, workspace=args.workspace))
+
 def cmd_prompts_wait(args, cfg):
     ids = collect_prompt_ids(args)
     if not ids:
@@ -1929,6 +1955,25 @@ def cmd_agent_handoff(args, cfg):
         webbrowser.open(result["deep_link"])
 
 
+def cmd_agent_start(args, cfg):
+    args.workspace = resolve_workspace(cfg, args.workspace)
+    if not args.workspace or args.workspace == "all":
+        die("a workspace is required — pass --workspace or set WORKSPACE_ID")
+    emit(execute_api_operation("start_agent_run", args, cfg))
+
+
+def cmd_agent_get(args, cfg):
+    emit(execute_api_operation("get_agent_run", args, cfg))
+
+
+def cmd_agent_reply(args, cfg):
+    emit(execute_api_operation("reply_agent_run", args, cfg))
+
+
+def cmd_agent_cancel(args, cfg):
+    emit(execute_api_operation("cancel_agent_run", args, cfg))
+
+
 # --------------------------------------------------------------------------
 # commands — workspace landing page
 # --------------------------------------------------------------------------
@@ -2499,6 +2544,16 @@ def build_parser(models_record=None):
     p.add_argument("--base-pack-id", help="bind as a pack one-off")
     p.add_argument("--workspace-id")
     p.set_defaults(func=cmd_prompts_update)
+    p = prompts.add_parser("attach", parents=[ws_parent], help="add a local image or MP4 to a prompt's results, e.g. a muxed film onto its video prompt")
+    p.add_argument("id")
+    p.add_argument("file", help="PNG, JPEG, WebP or AVIF image, or MP4 video")
+    p.set_defaults(func=cmd_prompts_attach, replace=False, replace_blob_id=None)
+    images = sub.add_parser("images", help="manage prompt result images and videos").add_subparsers(dest="images_cmd", required=True)
+    p = images.add_parser("replace", parents=[ws_parent], help="replace the sole result of the same media type and retain its original in debug history")
+    p.add_argument("id", help="prompt ID")
+    p.add_argument("file", help="replacement image or MP4 video")
+    p.add_argument("--blob-id", dest="replace_blob_id", type=int, help="select a result when the prompt has multiple images or videos")
+    p.set_defaults(func=cmd_prompts_attach, replace=True)
     p = prompts.add_parser("wait", parents=[ws_parent],
                            help="block until one or more prompts have images or a user_error")
     p.add_argument("ids", nargs="*", help="prompt ids (also accepted via --prompts-file or stdin)")
@@ -2752,6 +2807,23 @@ def build_parser(models_record=None):
     p.add_argument("--title", help="title for the imported Astria chat")
     p.add_argument("--open", action="store_true", help="open the Astria deep link after upload")
     p.set_defaults(func=cmd_agent_handoff)
+    # headless agent runs (A2A tasks): start, poll, answer, cancel
+    p = agent.add_parser("start", parents=[ws_parent], help="run the Astria agent headlessly, e.g. a /music-video skill")
+    p.add_argument("message", help="the request for the agent; start with /skill-name to run a skill and include every HTTPS media URL it needs")
+    p.set_defaults(func=cmd_agent_start)
+    p = agent.add_parser("get", help="poll an agent run: state, status message, questions, artifacts")
+    p.add_argument("id", help="task id of the agent run")
+    p.set_defaults(func=cmd_agent_get)
+    p = agent.add_parser("reply", help="answer the pending question of an input_required agent run")
+    p.add_argument("id", help="task id of the agent run")
+    p.add_argument("--tool-call-id", required=True, help="tool_call_id of the pending question in the run's questions")
+    p.add_argument("--answers", required=True, type=structured_argument("answers"),
+                   help='JSON object mapping each question text to the chosen option label, an array of labels for multi-select, '
+                        'or the user\'s own words, e.g. {"Which location?": "Beach"}')
+    p.set_defaults(func=cmd_agent_reply)
+    p = agent.add_parser("cancel", help="stop a working agent run")
+    p.add_argument("id", help="task id of the agent run")
+    p.set_defaults(func=cmd_agent_cancel)
 
     # landing page
     landing = sub.add_parser("landing", help="workspace landing page").add_subparsers(dest="sub", required=True)
@@ -2850,6 +2922,10 @@ OPERATION_POLICIES = {
     "get_workspace": (("workspaces", "get"), True, set()),
     "update_workspace": (("workspaces", "update"), False, set()),
     "run_template": (("packs", "run"), False, {"image", "attr"}),
+    "start_agent_run": (("agent", "start"), False, set()),
+    "get_agent_run": (("agent", "get"), True, set()),
+    "reply_agent_run": (("agent", "reply"), False, set()),
+    "cancel_agent_run": (("agent", "cancel"), False, set()),
 }
 CLI_ONLY_COMMANDS = {
     ("login",): "Host-local credential storage", ("logout",): "Host-local credential removal",
@@ -2858,6 +2934,8 @@ CLI_ONLY_COMMANDS = {
     ("variate",): "Multi-stage inspection/generation workflow not yet exported",
     ("inspect-video",): "Blocking inspection workflow not yet exported", ("inspect",): "Inspection not yet exported",
     ("download",): "Writes local files", ("agent", "handoff"): "Embedded-agent session handoff",
+    ("prompts", "attach"): "Local-file input, uploaded through the Darkroom's save path",
+    ("images", "replace"): "Local-file replacement with original retained in debug history",
     ("landing", "get"): "Local HTML extraction; MCP get_workspace returns metadata",
     ("landing", "set"): "Local-file input; MCP update_workspace accepts supplied HTML",
     ("cache", "refresh"): "Local cache", ("cache", "path"): "Local cache",
@@ -2905,6 +2983,10 @@ OPERATION_DESCRIPTIONS = {
     'list_templates': 'Use this when finding an existing reusable Astria photoshoot/template (also called a pack) for product images, lookbooks, or headshots. Returns accessible template names/slugs; inspect a selected template with get_template before run_template. Browsing does not run a photoshoot or spend credits.',
     'get_template': 'Use this when resolving a selected Astria photoshoot template by slug or ID before running it or inspecting its prompts, reference slots, and baseline pricing. Does not generate images or modify the template. Preserve the returned reference-slot order when calling run_template.',
     'run_template': 'Use this when the user asks to run a saved Astria photoshoot/template on their person or product, repeat an existing lookbook with a new SKU, or generate portraits from a selected pack. Resolve the template and reference slots first with get_template; pass tune_id entries in slot order, supported photo inputs, or tune_replacements mapping original IDs to replacement ID arrays to swap selected products while retaining other references. Do not substitute one generic image for a requested template run, and do not run a template for browsing or pricing advice. Creates paid Astria content within the requested scope; requires an idempotency_key. Returns the submitted order/prompt IDs; use list_prompts to find prompt IDs and get_prompt to check outputs without rerunning.',
+    'start_agent_run': 'Use this when the user asks Astria to carry out a multi-step creative job end to end by running an Astria agent skill, such as /music-video (song, video and the final muxed MP4), rather than a single generation. Pass the workspace ID and the request as message: start it with /skill-name and include every HTTPS media URL the job needs (upload local files with create_upload first). The agent works in Astria for several minutes and generates paid media within the request; requires an idempotency_key. Returns a task whose id identifies the run; poll get_agent_run until status.state is completed, input_required, failed or canceled. Do not use it for one image, video or song (use generate_images, generate_video or generate_music).',
+    'get_agent_run': 'Use this to follow a run started with start_agent_run; poll every 15-30 seconds while status.state is submitted or working. Returns the task: status.state (submitted, working, input_required, completed, failed or canceled), status.message with the agent\'s latest words, pending questions, artifacts and an Astria url. On input_required, put the questions to the user and answer them with reply_agent_run. Artifacts are the results: a file part has a downloadable uri (such as the final MP4) and a data part has a prompt_id for get_prompt. Does not start or charge anything.',
+    'reply_agent_run': 'Use this when get_agent_run reports input_required. Pass the run id, the question\'s tool_call_id and answers mapping each question text to the chosen option label (an array of labels for multi-select, or the user\'s own words). The run resumes and may generate paid media within its original request; requires an idempotency_key. Then poll get_agent_run; the task can still show the answered question for a few seconds.',
+    'cancel_agent_run': 'Use this only when the user asks to stop a run started with start_agent_run. Interrupts the working agent; generations it already submitted still finish and are billed. Only the user who started the run can cancel it. Requires an idempotency_key. Returns the task; get_agent_run reports canceled once the run stops.',
 }
 
 
@@ -2934,9 +3016,10 @@ def operation_parser(path):
     return parser
 
 
-# Updates replace saved metadata or assignments rather than only adding content.
+# Updates replace saved metadata or assignments rather than only adding content;
+# cancelling stops an agent's work in progress.
 DESTRUCTIVE_OPERATIONS = {
-    "update_reference", "update_prompt", "update_template", "update_workspace",
+    "update_reference", "update_prompt", "update_template", "update_workspace", "cancel_agent_run",
 }
 
 
@@ -2975,6 +3058,8 @@ def operation_catalog():
             required.append("text")
         if name == "create_reference":
             required.append("image_url")
+        if name == "start_agent_run":
+            required.append("workspace")
         if not readonly:
             properties["idempotency_key"] = {"type": "string", "minLength": 1,
                 "description": "Unique submission key. Reuse it only when retrying the same operation."}
