@@ -21,8 +21,10 @@ scope; loading this skill does not authorize a generation.
 - Music-led campaign films or motion design: read the current workflow with
   `get_skill(name: "music-video")` or `get_skill(name: "motion-design")`.
 - Ordinary image creation/editing or video: use the image/video sections below.
-- Prompt writing or a text-only storyboard: provide the requested text without
-  calling a generation tool. Load **prompt-writing** or **storyboard** as useful.
+- Prompt writing: load **prompt-writing** as useful.
+- A text-only cinematic storyboard: read `get_skill(name: "storyboard")`.
+  For the legacy `/artboard` command, read `get_skill(name: "artboard")`.
+  Provide the requested text without calling a generation tool.
 
 The focused workflows use this skill's reference syntax, submission contract,
 media transport, and completion handling; load those sections when executing.

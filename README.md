@@ -144,7 +144,8 @@ Astria web-agent sandbox remains supported.
 
 ## Skills
 
-`music-video` and `motion-design` are served by Astria MCP. Discover them with
+`music-video`, `motion-design`, `storyboard`, and the legacy `artboard` alias
+are served by Astria MCP. Discover them with
 `list_skills` and read their current instructions with `get_skill`; they are
 not bundled in the plugin. Named requests such as `/music-video` can be sent
 as chat text, though these remote skills are not local slash-menu entries.
@@ -163,11 +164,9 @@ plugin installations keep their bundled copies until upgraded.
 | **navigation** | Astria app sitemap |
 | **store-photoshoot** | Store catalog to reusable photoshoot workflow; some steps need CLI/UI |
 | **landing-page-editor** | Edit a workspace's landing HTML through optional CLI access |
-| **storyboard** | Text-only cinematic video sequence from a draft or ordered images |
 | **mux** | Combine video and music, verify synchronization and save the final film |
 | **fashion-music-track** | Music tracks for fashion brands, runway shows and campaign films |
 | **behind-the-scenes** | Candid handheld films from behind the scenes of a fashion shoot |
-| **artboard** | Legacy alias for Storyboard |
 | **unique-headshot** | Legacy alias for Avatar |
 
 ## Development and rollout
