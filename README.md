@@ -149,8 +149,16 @@ are served by Astria MCP. Discover them with
 `list_skills` and read their current instructions with `get_skill`; they are
 not bundled in the plugin. Named requests such as `/music-video` can be sent
 as chat text, though these remote skills are not local slash-menu entries.
-An authenticated Astria MCP connection is required to read them. Existing
-plugin installations keep their bundled copies until upgraded.
+An authenticated Astria MCP connection with access to the skill tools is
+required to read them. Existing plugin installations keep their bundled
+copies until upgraded.
+
+`mux` and `fashion-music-track` remain bundled as small loaders so their names
+are discoverable after installation. They fetch their current instructions
+with `get_skill`; their full recipes are maintained in the private database
+skill source rather than copied into this repository. If the skill tools are
+unavailable or access fails, the loaders report that error. They do not fall
+back to an older recipe.
 
 | Skill | Purpose |
 |-------|---------|
@@ -164,8 +172,8 @@ plugin installations keep their bundled copies until upgraded.
 | **navigation** | Astria app sitemap |
 | **store-photoshoot** | Store catalog to reusable photoshoot workflow; some steps need CLI/UI |
 | **landing-page-editor** | Edit a workspace's landing HTML through optional CLI access |
-| **mux** | Combine video and music, verify synchronization and save the final film |
-| **fashion-music-track** | Music tracks for fashion brands, runway shows and campaign films |
+| **mux** | Load the current workflow to combine video and music and save the final film |
+| **fashion-music-track** | Load the current soundtrack workflow for fashion brands, runway shows and campaign films |
 | **behind-the-scenes** | Candid handheld films from behind the scenes of a fashion shoot |
 | **unique-headshot** | Legacy alias for Avatar |
 
