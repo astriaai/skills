@@ -95,6 +95,7 @@ MODELS_TTL_DEFAULT = 86400
 PROMPT_FILTERS = {
     "text": {"mode": "truthy", "help": "filter by prompt text substring"},
     "text_ne": {"mode": "array", "help": "exclude a text substring (repeatable)"},
+    "skill_name": {"mode": "truthy", "help": "filter by originating database skill name (exact slug, including unpublished skills)"},
     "t": {"mode": "truthy", "help": "filter by prompt theme"},
     "pack_id": {"mode": "truthy", "help": "template prompts owned by a pack"},
     "base_pack_id": {"mode": "truthy", "help": "prompts generated from a pack"},
@@ -337,6 +338,8 @@ API_OPERATIONS.update({
 })
 API_OPERATIONS["run_template"]["fields"].append(["tune[tune_replacements]", "tune_replacements", "replacements"])
 API_OPERATIONS["run_template"]["requires_any"].append("tune_replacements")
+for generation_operation in ("generate_images", "generate_video", "generate_music"):
+    API_OPERATIONS[generation_operation]["fields"].append(["prompt[skill_name]", "skill_name", "truthy"])
 
 JSON_ARGUMENT_SCHEMAS = {
     "sources": {"type": "array", "items": {"type": "object", "properties": {
@@ -2593,6 +2596,7 @@ def build_parser(models_record=None):
     p.add_argument("--pack-id", help="author the prompt as a pack template prompt")
     p.add_argument("--base-pack-id", help="bind as a pack one-off")
     p.add_argument("--wait", action="store_true", help="block until images are ready")
+    p.add_argument("--skill-name", help="originating database skill name from get_skill; keep the main workflow name across helper skills; omit for unrelated generations")
     p.set_defaults(func=cmd_generate)
 
     # video
@@ -2650,6 +2654,7 @@ def build_parser(models_record=None):
                        models_record, "generates_audio",
                        "generate a soundtrack (picks the audio version of families that price it separately); omit for silent"))
     p.add_argument("--wait", action="store_true")
+    p.add_argument("--skill-name", help="originating database skill name from get_skill; keep the main workflow name across helper skills; omit for unrelated generations")
     p.set_defaults(func=cmd_video)
 
     # music
@@ -2672,6 +2677,7 @@ def build_parser(models_record=None):
     p.add_argument("--instrumental", action="store_true", help="make a song without vocals; cannot be combined with lyrics")
     p.add_argument("--num-images", default="1", help="number of songs to generate (default: %(default)s)")
     p.add_argument("--wait", action="store_true", help="block until the song is ready")
+    p.add_argument("--skill-name", help="originating database skill name from get_skill; keep the main workflow name across helper skills; omit for unrelated generations")
     p.set_defaults(func=cmd_music)
 
     p = sub.add_parser(
