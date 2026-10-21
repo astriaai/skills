@@ -15,7 +15,8 @@ scope; loading this skill does not authorize a generation.
 - Product-only shots or a coordinated lookbook: **product-photoshoot**.
 - A garment, shoes, jewelry, or accessory worn by a person: **virtual-try-on**.
 - Professional portraits of the real person in supplied photos:
-  **headshots-from-photos**. **avatar** instead invents a new face.
+  **headshots-from-photos**. For a new, invented face, read
+  `get_skill(name: "avatar")`.
 - A saved photoshoot: resolve it with `list_templates` / `get_template`, then
   use `run_template` with the user's references and requested scope.
 - Music-led campaign films or motion design: read the current workflow with
@@ -168,7 +169,7 @@ Idempotency prevents duplicate submissions but does not change that prompt rule.
 
 `pack_id` authors a template prompt inside an existing pack and requires a
 fine-tuned reference token in the text. `base_pack_id` binds a one-off to that
-pack's board frame without modifying its templates. Read **avatar**
+pack's board frame without modifying its templates. Read `get_skill(name: "avatar")`
 for reference-free faces: it requires Recraft 4.1 Pro and `inpaint_faces: false`.
 
 ## Video
