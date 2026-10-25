@@ -179,13 +179,14 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                  ['tune[name]', 'name', 'value'],
                                  ['tune[model_type]', 'model_type', 'value'],
                                  ['tune[base_tune_id]', 'model_id', 'value'],
-                                 ['tune[characteristics]', 'description', 'description'],
+                                 ['tune[characteristics]', 'characteristics', 'json_string'],
                                  ['tune[image_urls][]', 'image_url', 'array'],
                                  ['tune[images][]', 'image', 'array']],
                       'target': 'form',
                       'result': {},
                       'model': {'argument': 'model', 'output': 'model_id'},
-                      'requires_any': ['image_url', 'image']},
+                      'requires_any': ['image_url', 'image'],
+                      'characteristics': {'short_description': 'description', 'text': 'text'}},
  'generate_images': {'method': 'POST',
                      'path': '/tunes/{model_id}/prompts',
                      'fields': [['prompt[text]', 'text', 'value'],
@@ -320,8 +321,9 @@ API_OPERATIONS.update({
             ["reference_class_names", "reference_class_names", "json"]], "result": {},
         "requires_present": ["title", "subtitle", "main_class_name", "reference_class_names"]},
     "update_reference": {"method": "PATCH", "path": "/tunes/{id}", "target": "json_body", "root": "tune",
-        "fields": [["title", "title", "value"], ["name", "name", "value"], ["characteristics", "description", "description_object"],
-            ["sources", "sources", "json"]], "result": {}, "requires_present": ["title", "name", "description", "sources"]},
+        "fields": [["title", "title", "value"], ["name", "name", "value"], ["characteristics", "characteristics", "json"],
+            ["sources", "sources", "json"]], "result": {}, "requires_present": ["title", "name", "description", "text", "sources"],
+        "characteristics": {"short_description": "description", "text": "text"}},
     "update_prompt": {"method": "PATCH", "path": "/prompts/{id}", "target": "json_body", "root": "prompt",
         "fields": [["pack_id", "pack_id", "nullable_id"], ["base_pack_id", "base_pack_id", "nullable_id"],
             ["workspace_id", "workspace_id", "nullable_id"]], "result": {},
@@ -419,7 +421,7 @@ def operation_fields(name, values, resolved_media=None):
     for spec in API_OPERATIONS[name]["fields"]:
         wire, argument, mode = spec[:3]
         value = values.get(argument)
-        if value is None or (mode not in ("value", "boolean", "json", "description_object", "nullable_id") and not value):
+        if value is None or (mode not in ("value", "boolean", "json", "nullable_id") and not value):
             continue
         if mode in ("truthy", "value"):
             result.append(field(wire, value))
@@ -432,8 +434,6 @@ def operation_fields(name, values, resolved_media=None):
             result.extend(field(wire, item) for raw in items for item in _id_list(raw))
         elif mode == "json":
             result.append((wire, value))
-        elif mode == "description_object":
-            result.append((wire, {"short_description": value}))
         elif mode == "nullable_id":
             result.append((wire, nullable_id(value)))
         elif mode == "replacements":
@@ -441,8 +441,8 @@ def operation_fields(name, values, resolved_media=None):
                 raise AstriaError("Invalid tune_replacements")
             result.extend(field(f"{wire}[{source}][]", int(target))
                           for source, targets in value.items() for target in targets)
-        elif mode == "description":
-            result.append(field(wire, json.dumps({"short_description": value}, ensure_ascii=False, separators=(",", ":"))))
+        elif mode == "json_string":
+            result.append(field(wire, json.dumps(value, ensure_ascii=False, separators=(",", ":"))))
         elif mode == "media":
             result.append(media_field(wire, value, resolved_media.get(argument, value)))
         elif mode == "media_array":
@@ -482,6 +482,13 @@ def execute_api_operation(name, args, cfg, *, extra_fields=None):
     apply_catalog_defaults(cfg, definition, values)
     if "requires_present" in definition and not any(values.get(key) is not None for key in definition["requires_present"]):
         raise AstriaError("Provide at least one of: " + ", ".join(definition["requires_present"]))
+    if "characteristics" in definition:
+        changes = {key: values[argument] for key, argument in definition["characteristics"].items()
+                   if values.get(argument) is not None}
+        if changes:
+            existing = request(cfg, "GET", operation_path(definition, values), query=[],
+                               workspace=values.get("workspace"))["characteristics"] if definition["method"] == "PATCH" else {}
+            values["characteristics"] = {**existing, **changes}
     fields = operation_fields(name, values) + (extra_fields or [])
     # A JSON body nests its fields under root, or sends them top-level when it has none.
     body = {definition["root"]: dict(fields)} if "root" in definition else dict(fields)
@@ -2507,7 +2514,8 @@ def build_parser(models_record=None):
     p.add_argument("--name", required=True, help="subject class (man, woman, dress, shoes, pose, ...)")
     p.add_argument("--model", default=None, help=image_model_help(models_record, "base model for the reference"))
     p.add_argument("--model-type", default="faceid")
-    p.add_argument("--description", help="short description (stored in characteristics)")
+    p.add_argument("--description", help="short description (stored in characteristics.short_description)")
+    p.add_argument("--text", help="injected text (stored in characteristics.text); an empty string clears it")
     p.add_argument("--image-url", action="append", help="training image URL (repeatable)")
     p.add_argument("--image", action="append", help="local training image file (repeatable)")
     p.set_defaults(func=cmd_tunes_create)
@@ -2515,7 +2523,8 @@ def build_parser(models_record=None):
     p.add_argument("id")
     p.add_argument("--title")
     p.add_argument("--name")
-    p.add_argument("--description")
+    p.add_argument("--description", help="short description (stored in characteristics.short_description); omitted preserves it")
+    p.add_argument("--text", help="injected text (stored in characteristics.text); omitted preserves it, an empty string clears it")
     p.add_argument("--sources", type=structured_argument("sources"), help="catalog provenance as a JSON array of source records")
     p.set_defaults(func=cmd_tunes_update)
 
@@ -2974,7 +2983,7 @@ OPERATION_DESCRIPTIONS = {
     'update_workspace': 'Update a selected workspace title, brand website URL or supplied landing page HTML. Does not publish the workspace, invite members or change billing. Provide only the fields to change.',
     'create_template': 'Create a reusable photoshoot template container in the selected workspace. Supply a title, model and optional main product category; author its shots with generate_images using the returned pack_id, then set reference categories with update_template. Creating the container does not generate images.',
     'update_template': 'Update an existing template title, subtitle or reference categories. Does not generate images or replace its prompts. Inspect get_template before changing its category slots.',
-    'update_reference': 'Update a selected reference title, subject class, short description or verified catalog source records. Sources include provider, account_key, resource_type, external_id and captured metadata. Does not retrain the reference or generate images.',
+    'update_reference': 'Update a selected reference title, subject class, short description, injected text or verified catalog source records. text sets characteristics.text; omit it to preserve the current text or pass an empty string to clear it. Other characteristics are preserved. Sources include provider, account_key, resource_type, external_id and captured metadata. Does not retrain the reference or generate images.',
     'update_prompt': 'Assign an existing prompt to a template, clear template membership, or move it to an authorized workspace. Pass pack_id or base_pack_id as the string null to clear that assignment. Does not generate, delete or retry an image.',
     'list_models': 'Use this when choosing an Astria image, video or music model or checking supported media inputs, image resolutions, aspect ratios, lyrics limits, song prices, and defaults. Pass type (image, video or music) to get only that catalog. Returns the live model catalog and model names/tune IDs; does not generate media or spend credits. Use the explicit user selection or catalog default for generation.',
     'list_workspaces': 'Use this when finding an Astria workspace for a team or brand photoshoot. Returns authorized workspace IDs; expand migration to include their website URLs for duplicate detection. Use the selected ID consistently for references, templates, and generations. Does not create a workspace or generate media.',
@@ -3095,6 +3104,7 @@ def operation_contract():
         actions = [action for action in parser._actions if action.dest != "help"]
         covered = {spec[1] for spec in definition["fields"]} | {"workspace", "idempotency_key"}
         covered.update(re.findall(r"\{([^}]+)\}", definition["path"]))
+        covered.update(definition.get("characteristics", {}).values())
         if "path_choice" in definition:
             covered.add(definition["path_choice"][0])
             covered.update(re.findall(r"\{([^}]+)\}", definition["path_choice"][1]))
