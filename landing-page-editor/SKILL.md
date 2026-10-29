@@ -31,6 +31,7 @@ When editing, preserve these invariants (the live `/w/:slug` page depends on the
 - Pack links are exactly `/p/{slug}`; model/reference links use the `link` field from the tunes JSON verbatim (do NOT re-encode `%5B`/`%5D`)
 - Every image / video is wrapped in an `<a>` tag
 - Image and video URLs must be ones that already exist — do not invent URLs
+- Never use data URIs or embedded image data in HTML or CSS (including base64 images and inline SVG images). Use hosted HTTPS image URLs from Astria workspace attachments instead.
 - Videos use `<video autoplay muted loop playsinline poster="POSTER_URL"><source src="VIDEO_URL" type="video/mp4"></video>`
 - The string `__TUNES_JSON_PAYLOAD__` inside `<script type="application/json" id="tunes-data">…</script>` is a server-side placeholder. The server substitutes it at render time with the live tunes JSON. **Never replace it with literal JSON** — that freezes the cast and newly added tunes won't appear
 - Editorial styling: serif headlines, generous whitespace, hairline rules, `object-cover object-[center_top]` on portrait images, `max-h-[70vh]` on hero spreads, `aspect-[4/5]` or `aspect-[3/4]` on portrait containers
@@ -47,14 +48,17 @@ Preview the rendered page at `/w/{slug}`.
 Use `list_templates`, `list_references`, and `list_prompts` with their declared
 schemas. Read only the requested workspace. Use limit/offset pagination as needed.
 
-### 3. Attach supplied images to the workspace
+### 3. Upload and attach images with Astria
 
 Before inserting a supplied image into the page, call `attach_workspace_images`
 with `id` set to the destination workspace ID, `image_urls` containing the supplied
 HTTPS URLs, and a fresh `idempotency_key`. This includes Astria direct-upload URLs:
 putting a URL in HTML does not attach its blob, and unattached uploads can be purged.
-For local files, complete every `create_upload` upload first, then pass its
-`blob_signed_id` in the tool's `signed_ids` array. Never attach a pending upload.
+For local files, use Astria's `create_upload` tool to prepare the upload, execute
+its returned upload command, and verify it succeeds before passing the returned
+`blob_signed_id` to `attach_workspace_images` in its `signed_ids` array.
+`create_upload` only prepares an upload slot; it does not upload or attach the
+image itself. Never attach a pending upload or embed image bytes in the page.
 
 The tool reuses Astria blobs and imports external images into workspace storage.
 Use the returned `images[].url` values in the HTML. If attachment fails, resolve
