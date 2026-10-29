@@ -171,7 +171,7 @@ back to an older recipe.
 | **avatar** | New, original model faces as diverse, realistic headshots with explicit model/face-inpainting settings |
 | **navigation** | Astria app sitemap |
 | **store-photoshoot** | Store catalog to reusable photoshoot workflow; some steps need CLI/UI |
-| **landing-page-editor** | Edit a workspace's landing HTML through optional CLI access |
+| **landing-page-editor** | Edit workspace landing HTML through MCP and retain supplied images as workspace assets |
 | **mux** | Load the current workflow to combine video and music and save the final film |
 | **fashion-music-track** | Load the current soundtrack workflow for fashion brands, runway shows and campaign films |
 | **behind-the-scenes** | Candid handheld films from behind the scenes of a fashion shoot |

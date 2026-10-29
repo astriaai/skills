@@ -16,12 +16,11 @@ layout edits, adding a section, changing copy, swapping an image, fixing a
 tagline), edit the HTML directly and write it back. Do NOT send a `brief`
 unless the user wants a full regeneration.
 
-Landing-page HTML read/write is currently CLI-only. Read the optional
-[CLI reference](../astria-api/references/cli.md) and use independently authenticated
-CLI access for these commands. If only MCP/OAuth is available, use the Astria
-workspace UI; do not imply there is a landing-page MCP tool or that host OAuth
-authenticates the CLI. Pass `-w <workspace_id>` for CLI workspace scope.
-Use MCP for the supported data reads below.
+Use `get_workspace` with the destination workspace `id` to read the current HTML
+and `update_workspace` with that same `id` and `landing_page_html` to save edits.
+For embedded agents, omit the optional `workspace` scope to inherit the current
+chat scope unless the user explicitly requested another destination.
+Use `brief` only for an explicitly requested full regeneration.
 
 ## Constraints carried over from `LANDING_PAGE_PROMPT`
 
@@ -40,49 +39,47 @@ When editing, preserve these invariants (the live `/w/:slug` page depends on the
 
 ### 1. Fetch the current landing page HTML
 
-```bash
-astria landing get -w <workspace_id> --html > /tmp/landing_page.html
-```
+Call `get_workspace` and retain `landing_page_html` unchanged as the starting point.
+Preview the rendered page at `/w/{slug}`.
 
-`astria landing get -w <workspace_id>` (without `--html`) returns the full
-workspace JSON — `title`, `slug`, `brief`, `url`, `public_at`, `unlisted_at` —
-when you need those. Preview the rendered page at `/w/{slug}`.
+### 2. Read data needed for the edit
 
-### 2. Pull workspace data (when an edit needs to reference real packs / prompts / tunes)
+Use `list_templates`, `list_references`, and `list_prompts` with their declared
+schemas. Read only the requested workspace. Use limit/offset pagination as needed.
 
-Use `list_templates`, `list_references` (the page's cast), and `list_prompts`
-with `workspace: "<workspace_id>"`. Pass string `limit`/`offset` for pagination;
-`list_prompts` with `pack_id` retrieves one template section at a time. Default
-sort is newest ID first; advance the offset until a page comes back empty.
+### 3. Attach supplied images to the workspace
 
-### 3. Make the incremental edit
+Before inserting a supplied image into the page, call `attach_workspace_images`
+with `id` set to the destination workspace ID, `image_urls` containing the supplied
+HTTPS URLs, and a fresh `idempotency_key`. This includes Astria direct-upload URLs:
+putting a URL in HTML does not attach its blob, and unattached uploads can be purged.
+For local files, complete every `create_upload` upload first, then pass its
+`blob_signed_id` in the tool's `signed_ids` array. Never attach a pending upload.
 
-Edit `/tmp/landing_page.html` locally. Keep changes surgical — the generator
-produced thousands of bytes of layout and most of it should stay verbatim.
-Re-read the constraints section above before saving.
+The tool reuses Astria blobs and imports external images into workspace storage.
+Use the returned `images[].url` values in the HTML. If attachment fails, resolve
+the error before saving HTML that uses those images. Images already listed in
+`get_workspace.images` need no attachment call. Do not create a reference or a
+generation merely to retain a landing-page image.
 
-### 4. Write the page back
+### 4. Make the incremental edit
 
-```bash
-astria landing set -w <workspace_id> --html-file /tmp/landing_page.html
-```
+Preserve unrelated HTML and the constraints above. Save a working text file
+only if helpful; do not substitute a filename for the HTML tool argument.
 
-Do NOT pass `--brief` here — that discards your edits and regenerates from
-scratch via Gemini.
+### 5. Save and verify
 
-### 5. Verify
-
-Open `/w/{slug}` and visually confirm the change. The `__TUNES_JSON_PAYLOAD__`
-placeholder is replaced server-side at render time — if a JSON-shaped string
-still shows on the rendered page, the placeholder was accidentally deleted or
-renamed.
+Call `update_workspace` with the complete `landing_page_html` and a fresh
+idempotency_key. Do not pass `brief`. Read it back with `get_workspace` and
+verify the saved change, confirm the new images appear in `images`, and check the
+rendered page when browser access is available.
 
 ## Regenerating from scratch
 
 Only when the user explicitly asks for a full redesign — submit a `brief` and
 the server runs `LANDING_PAGE_PROMPT` against Gemini, overwriting the HTML:
 
-```bash
-astria landing set -w <workspace_id> \
-  --brief "Editorial fashion lookbook, AW26, dark moody palette, emphasize the womenswear packs"
-```
+Call `update_workspace` with the requested `brief` and a fresh idempotency_key.
+Attach supplied images using step 3 before submitting the brief, so the generator
+receives them as workspace assets.
+Read the resulting HTML with `get_workspace` and verify the result.
