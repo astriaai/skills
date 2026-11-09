@@ -35,7 +35,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
-VERSION = "1.25.0"
+VERSION = "1.30.0"
 
 
 def _platform_token():
@@ -117,7 +117,11 @@ PROMPT_FILTERS = {
     "archived": {"mode": "flag", "help": "only archived prompts; omitted selects unarchived prompts"},
     "is_multiperson": {"mode": "boolean", "help": "filter by multiperson status"},
     "is_video": {"mode": "boolean", "help": "filter by video status"},
-    "is_api": {"mode": "boolean", "help": "filter by API source"},
+    "media_type": {"mode": "truthy", "choices": ["image", "video", "music"],
+                   "help": "filter by media type; image excludes music; takes precedence over is_video"},
+    "creation_source": {"mode": "truthy", "choices": ["web", "mcp", "cli", "photoshop", "api"],
+                        "help": "filter by creation source"},
+    "is_api": {"mode": "boolean", "help": "legacy filter: web versus all API-authenticated sources"},
     "is_input_video": {"mode": "boolean", "help": "filter by input video presence"},
     "has_input_image": {"mode": "boolean", "help": "filter by input image presence"},
     "user_error": {"mode": "boolean", "help": "filter by user-visible error presence"},
@@ -168,9 +172,11 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                 ['limit', 'limit', 'truthy'],
                                 ['offset', 'offset', 'truthy'],
                                 ['model_type', 'model_type', 'truthy'],
-                                ['branch', 'branch', 'truthy']],
+                                ['branch', 'branch', 'truthy'],
+                                ['creation_source', 'creation_source', 'truthy'],
+                                ['archived', 'archived', 'truthy']],
                      'target': 'query',
-                     'result': {'pick': ['id', 'title', 'name', 'model_type', 'orig_images']},
+                     'result': {'pick': ['id', 'title', 'name', 'model_type', 'creation_source', 'creation_client', 'orig_images']},
                      'path_choice': ['gallery', '/gallery/tunes']},
  'get_reference': {'method': 'GET', 'path': '/tunes/{id}', 'fields': [], 'target': 'query', 'result': {}},
  'create_reference': {'method': 'POST',
@@ -181,11 +187,13 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                  ['tune[base_tune_id]', 'model_id', 'value'],
                                  ['tune[characteristics]', 'characteristics', 'json_string'],
                                  ['tune[image_urls][]', 'image_url', 'array'],
-                                 ['tune[images][]', 'image', 'array']],
+                                 ['tune[images][]', 'image', 'array'],
+                                 ['tune[image_captions][]', 'image_caption', 'array']],
                       'target': 'form',
                       'result': {},
                       'model': {'argument': 'model', 'output': 'model_id'},
                       'requires_any': ['image_url', 'image'],
+                      'per_image': {'argument': 'image_caption', 'images': ['image_url', 'image']},
                       'characteristics': {'short_description': 'description', 'text': 'text'}},
  'generate_images': {'method': 'POST',
                      'path': '/tunes/{model_id}/prompts',
@@ -194,6 +202,10 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                 ['prompt[seed]', 'seed', 'truthy'],
                                 ['prompt[film_grain]', 'film_grain', 'boolean'],
                                 ['prompt[inpaint_faces]', 'inpaint_faces', 'boolean'],
+                                ['prompt[inpaint_preset]', 'inpaint_preset', 'value'],
+                                ['prompt[background_color]', 'background_color', 'value'],
+                                ['prompt[create_crops]', 'create_crops', 'value'],
+                                ['prompt[lynx]', 'lynx', 'boolean'],
                                 ['prompt[aspect_ratio]', 'aspect_ratio', 'truthy'],
                                 ['prompt[resolution]', 'resolution', 'truthy'],
                                 ['prompt[input_image]', 'input_image', 'media'],
@@ -227,8 +239,8 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                                ['prompt[video_duration]', 'duration', 'truthy'],
                                ['prompt[video_first_frame]', 'first_frame', 'media'],
                                ['prompt[video_last_frame]', 'last_frame', 'media'],
-                               ['prompt[input_video]', 'input_video', 'media'],
-                               ['prompt[audio_reference]', 'audio_reference', 'media'],
+                               ['prompt[video_references][]', 'video_references', 'media_array', 'prompt[video_references][]'],
+                               ['prompt[audio_references][]', 'audio_references', 'media_array', 'prompt[audio_references][]'],
                                ['prompt[generate_audio]', 'generate_audio', 'boolean'],
                                ['prompt[video_audio]', 'generate_audio', 'boolean']],
                     'target': 'form',
@@ -237,16 +249,13 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                     'catalog_defaults': {'video_model': 'default_video_model_family'},
                     'references': {'argument': 'references',
                                    'model': 'model_id',
-                                   'texts': ['text', 'video_prompt']},
-                    'image_count': {'argument': 'num_images',
-                                    'input': 'input_image',
-                                    'edit': 1,
-                                    'generate': 2}},
+                                   'texts': ['text', 'video_prompt']}},
  'generate_music': {'method': 'POST',
                     'path': '/tunes/{model_id}/prompts',
                     'fields': [['prompt[text]', 'text', 'value'],
                                ['prompt[lyrics]', 'lyrics', 'truthy'],
                                ['prompt[instrumental]', 'instrumental', 'flag'],
+                               ['prompt[audio_reference]', 'audio_reference', 'media'],
                                ['prompt[num_images]', 'num_images', 'value']],
                     'target': 'form',
                     'result': {'first': True},
@@ -258,6 +267,8 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                              for name, spec in PROMPT_FILTERS.items()] + [['expand[]', 'expand', 'array']],
                   'target': 'query',
                   'result': {'pick': ['id',
+                                      'creation_source',
+                                      'creation_client',
                                       'text',
                                       'num_images',
                                       'cost_mc',
@@ -283,10 +294,15 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
                 'result': {}},
  'list_templates': {'method': 'GET',
                     'path': '/packs',
-                    'fields': [['limit', 'limit', 'truthy'], ['offset', 'offset', 'truthy']],
+                    'fields': [['limit', 'limit', 'truthy'], ['offset', 'offset', 'truthy'], ['sort', 'sort', 'truthy']],
                     'target': 'query',
-                    'result': {'pick': ['id', 'title', 'slug', 'subtitle', 'main_class_name', 'costs']}},
+                    'result': {'pick': ['id', 'title', 'slug', 'subtitle', 'main_class_name', 'costs', 'thumbnail_url']}},
  'get_template': {'method': 'GET', 'path': '/p/{slug}.json', 'fields': [], 'target': 'query', 'result': {}},
+ 'get_template_text': {'method': 'GET',
+                       'path': '/p/{slug}.txt',
+                       'fields': [['class', 'class_name', 'truthy'], ['limit', 'limit', 'truthy'], ['offset', 'offset', 'truthy']],
+                       'target': 'query',
+                       'result': {'text': True}},
  'run_template': {'method': 'POST',
                   'path': '/p/{slug}/tunes',
                   'fields': [['tune[tune_ids][]', 'tune_id', 'ids'],
@@ -306,12 +322,36 @@ API_OPERATIONS = {'list_models': {'method': 'GET',
 
 
 API_OPERATIONS.update({
+    "classify_image": {"method": "POST", "path": "/images/class_name", "target": "form",
+        "fields": [["file_url", "source", "value"], ["class_names[]", "class_name", "array"]], "result": {}},
+    "compose_video_edit": {"method": "POST", "path": "/variate/prompt", "target": "json_body",
+        "fields": [["brief", "brief", "value"], ["tune_ids", "tune_id", "json"]], "result": {}},
+    "inspect_image": {"method": "POST", "path": "/images/describe", "target": "form",
+        "fields": [["file_url", "source", "value"], ["names[]", "name", "array"]], "result": {}},
+    "inspect_video": {"method": "POST", "path": "/videos/inspect", "target": "json_body",
+        "fields": [["file_url", "file_url", "value"], ["blob_signed_id", "blob_signed_id", "value"],
+            ["tune_ids", "tune_id", "json"]], "result": {}},
+    "get_video_inspection": {"method": "GET", "path": "/videos/inspect/{id}", "target": "query",
+        "fields": [], "result": {}, "no_workspace": True},
+    "enhance_video": {"method": "POST", "path": "/prompts/{id}/enhance_video", "target": "json_body",
+        "fields": [["video_upscale_model", "video_upscale_model", "truthy"],
+            ["video_upscale_target_resolution", "video_upscale_target_resolution", "truthy"],
+            ["video_fps_model", "video_fps_model", "truthy"]],
+        "result": {}, "requires_any": ["video_upscale_model", "video_fps_model"]},
+    "attach_prompt_media": {"method": "POST", "path": "/prompts/{id}/images", "target": "json_body",
+        "fields": [["blob_signed_id", "blob_signed_id", "value"]], "result": {}},
+    "replace_prompt_media": {"method": "POST", "path": "/prompts/{id}/images", "target": "json_body",
+        "fields": [["blob_signed_id", "blob_signed_id", "value"], ["replace_blob_id", "replace_blob_id", "value"],
+            ["replace", "replace", "value"]], "result": {}},
     "create_workspace": {"method": "POST", "path": "/workspaces.json", "target": "json_body", "root": "workspace",
         "fields": [["title", "title", "value"], ["url", "url", "value"]], "result": {}, "no_workspace": True},
+    "attach_workspace_images": {"method": "POST", "path": "/workspaces/{id}/attach_images.json", "target": "json_body",
+        "fields": [["signed_ids", "signed_ids", "json"], ["image_urls", "image_urls", "json"]],
+        "result": {}, "requires_any": ["signed_ids", "image_urls"]},
     "get_workspace": {"method": "GET", "path": "/workspaces/{id}.json", "target": "query", "fields": [], "result": {}},
     "update_workspace": {"method": "PATCH", "path": "/workspaces/{id}.json", "target": "json_body", "root": "workspace",
-        "fields": [["title", "title", "value"], ["url", "url", "value"], ["landing_page_html", "landing_page_html", "value"]],
-        "result": {}, "requires_present": ["title", "url", "landing_page_html"]},
+        "fields": [["title", "title", "value"], ["url", "url", "value"], ["landing_page_html", "landing_page_html", "value"], ["brief", "brief", "value"]],
+        "result": {}, "requires_present": ["title", "url", "landing_page_html", "brief"]},
     "create_template": {"method": "POST", "path": "/packs", "target": "json_body", "root": "pack",
         "fields": [["title", "title", "value"], ["subtitle", "subtitle", "value"], ["base_tune_id", "model_id", "value"],
             ["model_type", "model_type", "value"], ["main_class_name", "main_class_name", "value"]],
@@ -328,6 +368,11 @@ API_OPERATIONS.update({
         "fields": [["pack_id", "pack_id", "nullable_id"], ["base_pack_id", "base_pack_id", "nullable_id"],
             ["workspace_id", "workspace_id", "nullable_id"]], "result": {},
         "requires_present": ["pack_id", "base_pack_id", "workspace_id"]},
+    # Archiving hides a prompt or reference from lists and is undone by unarchive; nothing is deleted.
+    "archive_prompt": {"method": "PATCH", "path": "/prompts/{id}/archive", "target": "json_body", "fields": [], "result": {},
+        "path_choice": ["unarchive", "/prompts/{id}/unarchive"]},
+    "archive_reference": {"method": "PATCH", "path": "/tunes/{id}/archive", "target": "json_body", "fields": [], "result": {},
+        "path_choice": ["unarchive", "/tunes/{id}/unarchive"]},
     # Headless agent runs, reported as A2A tasks. The run id is its chat session id.
     "start_agent_run": {"method": "POST", "path": "/api/agent_runs", "target": "form",
         "fields": [["workspace_id", "workspace", "value"], ["message", "message", "value"]], "result": {}},
@@ -340,10 +385,16 @@ API_OPERATIONS.update({
 })
 API_OPERATIONS["run_template"]["fields"].append(["tune[tune_replacements]", "tune_replacements", "replacements"])
 API_OPERATIONS["run_template"]["requires_any"].append("tune_replacements")
+API_OPERATIONS["run_template"]["fields"].append(["tune[prompt_attributes]", "prompt_attributes", "attributes"])
+API_OPERATIONS["generate_video"]["fields"].append(["prompt[order_id]", "order_id", "truthy"])
 for generation_operation in ("generate_images", "generate_video", "generate_music"):
     API_OPERATIONS[generation_operation]["fields"].append(["prompt[skill_name]", "skill_name", "truthy"])
 
 JSON_ARGUMENT_SCHEMAS = {
+    "background_color": {"type": "string", "pattern": "#?(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})"},
+    "create_crops": {"type": "integer", "minimum": 0, "maximum": 100},
+    "prompt_attributes": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
+        "additionalProperties": {"type": "string"}},
     "sources": {"type": "array", "items": {"type": "object", "properties": {
         "provider": {"type": "string"}, "account_key": {"type": "string"},
         "resource_type": {"type": "string"}, "external_id": {"type": "string"},
@@ -366,6 +417,10 @@ def validate_argument(schema, value):
         return (isinstance(value, str) and len(value) >= schema.get("minLength", 0)
             and ("pattern" not in schema or re.fullmatch(schema["pattern"], value) is not None)
             and ("enum" not in schema or value in schema["enum"]))
+    if kind == "integer":
+        return (type(value) is int and schema.get("minimum", value) <= value <= schema.get("maximum", value))
+    if kind == "null":
+        return value is None
     if kind == "boolean":
         return isinstance(value, bool)
     if kind == "array":
@@ -434,6 +489,10 @@ def operation_fields(name, values, resolved_media=None):
             result.extend(field(wire, item) for raw in items for item in _id_list(raw))
         elif mode == "json":
             result.append((wire, value))
+        elif mode == "attributes":
+            if not validate_argument(JSON_ARGUMENT_SCHEMAS["prompt_attributes"], value):
+                raise AstriaError("Invalid prompt_attributes: use plain attribute names and string values")
+            result.extend(field(f"{wire}[{key}]", item) for key, item in value.items())
         elif mode == "nullable_id":
             result.append((wire, nullable_id(value)))
         elif mode == "replacements":
@@ -482,6 +541,12 @@ def execute_api_operation(name, args, cfg, *, extra_fields=None):
     apply_catalog_defaults(cfg, definition, values)
     if "requires_present" in definition and not any(values.get(key) is not None for key in definition["requires_present"]):
         raise AstriaError("Provide at least one of: " + ", ".join(definition["requires_present"]))
+    if "per_image" in definition:
+        spec = definition["per_image"]
+        items = values.get(spec["argument"])
+        count = sum(len(values.get(key) or []) for key in spec["images"])
+        if items and len(items) != count:
+            raise AstriaError(f"Provide one {spec['argument']} per image: {count} images, {len(items)} given")
     if "characteristics" in definition:
         changes = {key: values[argument] for key, argument in definition["characteristics"].items()
                    if values.get(argument) is not None}
@@ -1298,12 +1363,18 @@ def cmd_tunes_get(args, cfg):
 def cmd_tunes_create(args, cfg):
     if not (args.image_url or args.image):
         die("provide at least one --image-url or --image")
+    if getattr(args, "image_caption", None) and args.image_url and args.image:
+        # Rails attaches uploaded files before URLs, so a mixed set has no single caption order.
+        die("--image-caption needs images from only --image-url or only --image")
     values = vars(args).copy()
     values["image"] = direct_uploads(cfg, args.image or [])
     emit(execute_api_operation("create_reference", argparse.Namespace(**values), cfg))
 
 def cmd_tunes_update(args, cfg):
     emit(execute_api_operation("update_reference", args, cfg))
+
+def cmd_tunes_archive(args, cfg):
+    emit(execute_api_operation("archive_reference", args, cfg))
 
 
 # --------------------------------------------------------------------------
@@ -1318,15 +1389,19 @@ def cmd_prompts_get(args, cfg):
 def cmd_prompts_update(args, cfg):
     emit(execute_api_operation("update_prompt", args, cfg))
 
+def cmd_prompts_archive(args, cfg):
+    emit(execute_api_operation("archive_prompt", args, cfg))
+
+def cmd_prompts_enhance(args, cfg):
+    emit(execute_api_operation("enhance_video", args, cfg))
+
 def cmd_prompts_attach(args, cfg):
     # The Darkroom's save path, optionally replacing one result with a retained original.
-    blob = direct_upload_records(cfg, [args.file])[0]
-    payload = {"blob_signed_id": blob["signed_id"]}
-    if args.replace_blob_id is not None:
-        payload["replace_blob_id"] = args.replace_blob_id
-    elif args.replace:
-        payload["replace"] = True
-    emit(request(cfg, "POST", f"/prompts/{args.id}/images", json_body=payload, workspace=args.workspace))
+    if bool(args.file) == bool(args.blob_signed_id):
+        die("provide exactly one local file or --blob-signed-id")
+    if args.file:
+        args.blob_signed_id = direct_upload_records(cfg, [args.file])[0]["signed_id"]
+    emit(execute_api_operation("replace_prompt_media" if args.replace else "attach_prompt_media", args, cfg))
 
 def cmd_prompts_wait(args, cfg):
     ids = collect_prompt_ids(args)
@@ -1447,9 +1522,11 @@ def _generate(args, cfg, video):
     values["model_id"] = tune_id
     for text_argument in definition["references"]["texts"]:
         values[text_argument] = prepend_reference_mentions(getattr(args, text_argument), reference_mentions)
-    counts = definition["image_count"]
-    values["num_images"] = resolve_num_images(cfg, args.num_images,
-        counts["edit"] if values.get(counts["input"]) else counts["generate"])
+    # Video omits num_images unless given; Astria renders one first frame.
+    if "image_count" in definition:
+        counts = definition["image_count"]
+        values["num_images"] = resolve_num_images(cfg, args.num_images,
+            counts["edit"] if values.get(counts["input"]) else counts["generate"])
     # Both generate_audio and video_audio remain in the shared definition,
     # preserving the existing audio compatibility patch.
     prompt = request(cfg, definition["method"], operation_path(definition, values),
@@ -1469,34 +1546,20 @@ def cmd_generate(args, cfg):
 
 def cmd_video(args, cfg):
     if getattr(args, "input_image", None):
-        die("--input-image is for image generation/editing. For video, use --first-frame, --last-frame, --input-video, --image-reference, or --reference NAME=PATH_OR_URL.")
+        die("--input-image is for image generation/editing. For video, use --first-frame, --last-frame, --video-reference, --image-reference, or --reference NAME=PATH_OR_URL.")
     _generate(args, cfg, video=True)
 
 
 def cmd_music(args, cfg):
+    if args.audio_reference:
+        args.audio_reference = resolve_media_values(cfg, [args.audio_reference])[0]
     prompt = execute_api_operation("generate_music", args, cfg)
     if args.wait:
         prompt = poll_prompt(cfg, prompt["tune_id"], prompt["id"], workspace=args.workspace)
     emit(prompt)
 
 
-VARIATE_VIDEO_MODEL = "seedance25_720p"
-VARIATE_PROMPT_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "video_prompt": {"type": "string"},
-    },
-    "required": ["video_prompt"],
-    "additionalProperties": False,
-}
-VARIATE_SYSTEM_MESSAGE = (
-    "Write one production-ready Seedance 2.5 video-to-video edit prompt. "
-    "Use the source video description as factual timing, action, staging, camera, lighting, "
-    "transitions, and audio context. Apply the edit brief without inventing changes it does not request. "
-    "When replacement reference tokens are supplied, include every token exactly once and state clearly "
-    "what each replaces. Do not mention the source description, brief, these instructions, or analysis. "
-    "Return only the requested JSON."
-)
+VARIATE_VIDEO_MODEL = "seedance25_draft"
 
 
 def parse_variate_reference_specs(values):
@@ -1529,13 +1592,9 @@ def create_variate_reference(args, cfg, default_tune_id, spec, upload_record):
     source = spec["source"]
     class_info = {}
     if not spec["name"]:
-        class_info = request(
-            cfg,
-            "POST",
-            "/images/class_name",
-            form=[field("file_url", source if remote_url(source) else upload_record["public_url"])],
-            workspace=args.workspace,
-        )
+        class_info = execute_api_operation("classify_image", argparse.Namespace(
+            source=source if remote_url(source) else upload_record["public_url"],
+            class_name=None, workspace=args.workspace), cfg)
     name = spec["name"] or class_info.get("class_name") or "image"
     characteristics = {
         key: value
@@ -1564,47 +1623,10 @@ def create_variate_reference(args, cfg, default_tune_id, spec, upload_record):
     }
 
 
-def variate_prompt_messages(description, brief, references):
-    tokens = [f"<faceid:{reference['id']}:1>" for reference in references]
-    reference_tokens = "\n".join(tokens) or "(none)"
-    return [
-        {"role": "system", "content": VARIATE_SYSTEM_MESSAGE},
-        {
-            "role": "user",
-            "content": "\n\n".join([
-                f"Source video description:\n{description.strip()}",
-                f"Edit brief:\n{brief.strip() or '(none)'}",
-                f"Replacement reference tokens:\n{reference_tokens}",
-            ]),
-        },
-    ]
-
-
-def compose_variate_video_prompt(args, cfg, description, references):
-    response = request(
-        cfg,
-        "POST",
-        "/assist/complete",
-        json_body={
-            "messages": variate_prompt_messages(description, args.brief, references),
-            "response_schema": VARIATE_PROMPT_SCHEMA,
-        },
-        workspace=args.workspace,
-        timeout=30,
-    )
-    try:
-        video_prompt = json.loads(response["text"])["video_prompt"].strip()
-    except (KeyError, TypeError, json.JSONDecodeError) as exc:
-        raise AstriaError("the Variate prompt writer returned invalid JSON") from exc
-    if not video_prompt:
-        raise AstriaError("the Variate prompt writer returned an empty video prompt")
-    missing_tokens = [
-        f"<faceid:{reference['id']}:1>"
-        for reference in references
-        if f"<faceid:{reference['id']}:1>" not in video_prompt
-    ]
-    return (f"Replace objects in the scene with {' '.join(missing_tokens)}. {video_prompt}"
-            if missing_tokens else video_prompt)
+def compose_variate_video_prompt(args, cfg, references):
+    result = execute_api_operation("compose_video_edit", argparse.Namespace(
+        brief=args.brief, tune_id=[str(reference["id"]) for reference in references], workspace=args.workspace), cfg)
+    return result["video_prompt"]
 
 
 INSPECT_TIMEOUT_SEC = 240
@@ -1634,22 +1656,6 @@ def inspect_video(cfg, payload, workspace=None):
     if not str(record.get("description") or "").strip():
         raise AstriaError("video inspection returned no description")
     return record
-
-
-def variate_description(args, cfg, source_payload):
-    if args.description is not None:
-        description = args.description.strip()
-    elif args.description_file:
-        path = Path(args.description_file)
-        if not path.is_file():
-            die(f"file not found: {args.description_file}")
-        description = path.read_text(encoding="utf-8").strip()
-    else:
-        inspected = inspect_video(cfg, source_payload, workspace=args.workspace)
-        description = inspected["description"].strip()
-    if not description:
-        die("video description cannot be empty")
-    return description
 
 
 def cmd_variate(args, cfg):
@@ -1682,13 +1688,6 @@ def cmd_variate(args, cfg):
         None if remote_url(spec["source"]) else next(upload_records)
         for spec in reference_specs
     ]
-    source_payload = (
-        {"file_url": args.source}
-        if remote_url(args.source)
-        else {"blob_signed_id": source_record["signed_id"]}
-    )
-    description = variate_description(args, cfg, source_payload)
-
     references = [
         {"id": tune_id, "created": False}
         for tune_id in existing_ids
@@ -1697,7 +1696,7 @@ def cmd_variate(args, cfg):
         create_variate_reference(args, cfg, default_tune_id, spec, upload_record)
         for spec, upload_record in zip(reference_specs, reference_uploads)
     ]
-    video_prompt = compose_variate_video_prompt(args, cfg, description, references)
+    video_prompt = compose_variate_video_prompt(args, cfg, references)
 
     prompt_payload = {
         "text": "",
@@ -1725,11 +1724,18 @@ def cmd_variate(args, cfg):
     if args.wait:
         prompt = poll_prompt(cfg, default_tune_id, prompt["id"], workspace=args.workspace)
     emit({
-        "description": description,
         "references": references,
         "video_prompt": video_prompt,
         "prompt": prompt,
     })
+
+
+def cmd_video_inspections_create(args, cfg):
+    emit(execute_api_operation("inspect_video", args, cfg))
+
+
+def cmd_video_inspections_get(args, cfg):
+    emit(execute_api_operation("get_video_inspection", args, cfg))
 
 
 def cmd_inspect_video(args, cfg):
@@ -1744,6 +1750,15 @@ def cmd_inspect_video(args, cfg):
     emit(inspect_video(cfg, payload, workspace=args.workspace))
 
 
+def cmd_classify_image(args, cfg):
+    source = args.source if remote_url(args.source) else direct_upload_records(cfg, [args.source])[0]["public_url"]
+    emit(execute_api_operation("classify_image", argparse.Namespace(**{**vars(args), "source": source}), cfg))
+
+
+def cmd_compose_video_edit(args, cfg):
+    emit(execute_api_operation("compose_video_edit", args, cfg))
+
+
 def cmd_inspect(args, cfg):
     if remote_url(args.source):
         if not args.source.startswith("https://"):
@@ -1752,13 +1767,12 @@ def cmd_inspect(args, cfg):
     else:
         image_url = direct_upload_records(cfg, [args.source])[0]["public_url"]
 
-    form = [field("file_url", image_url)]
-    form.extend(field("names[]", name) for name in args.name or [])
+    definition = API_OPERATIONS["inspect_image"]
     result = request(
         cfg,
-        "POST",
-        "/images/describe",
-        form=form,
+        definition["method"],
+        definition["path"],
+        form=operation_fields("inspect_image", {**vars(args), "source": image_url}),
         workspace=args.workspace,
         timeout=125,
     )
@@ -1775,6 +1789,11 @@ def cmd_packs_list(args, cfg):
 
 def cmd_packs_get(args, cfg):
     emit(execute_api_operation("get_template", args, cfg))
+
+def cmd_packs_text(args, cfg):
+    text = execute_api_operation("get_template_text", args, cfg)
+    sink = _operation_output.get()
+    sink.append(text) if sink is not None else sys.stdout.write(text)
 
 def cmd_packs_create(args, cfg):
     emit(execute_api_operation("create_template", args, cfg))
@@ -1813,15 +1832,14 @@ def cmd_packs_run(args, cfg):
         die("nothing to run — pass --tune-id (existing tunes) or a training set (--title/--name/--image)")
     values = vars(args).copy()
     values["image"] = direct_uploads(cfg, args.image or [])
-    # Named overrides are defined once in the shared contract; --attr is the
-    # CLI-only escape hatch for additional prompt attributes.
-    extras = []
+    # Both --attr and structured MCP overrides use the same field encoder.
+    values["prompt_attributes"] = dict(args.prompt_attributes or {})
     for raw in args.attr or []:
         if "=" not in raw:
             die(f"--attr must be KEY=VALUE (got {raw!r})")
         key, value = raw.split("=", 1)
-        extras.append(field(f"tune[prompt_attributes][{key.strip()}]", value.strip()))
-    emit(execute_api_operation("run_template", argparse.Namespace(**values), cfg, extra_fields=extras))
+        values["prompt_attributes"][key.strip()] = value.strip()
+    emit(execute_api_operation("run_template", argparse.Namespace(**values), cfg))
 
 def cmd_workspaces_list(args, cfg):
     emit(execute_api_operation("list_workspaces", args, cfg))
@@ -1832,6 +1850,10 @@ def cmd_workspaces_create(args, cfg):
 
 def cmd_workspaces_get(args, cfg):
     emit(execute_api_operation("get_workspace", args, cfg))
+
+
+def cmd_workspaces_attach_images(args, cfg):
+    emit(execute_api_operation("attach_workspace_images", args, cfg))
 
 
 def cmd_workspaces_update(args, cfg):
@@ -2502,7 +2524,9 @@ def build_parser(models_record=None):
     p.add_argument("--name", action="append", help="filter by class name (repeatable)")
     p.add_argument("--model-type", help="filter by model_type (e.g. faceid)")
     p.add_argument("--branch", help="filter by branch (e.g. partner-1 to discover partner models)")
+    p.add_argument("--creation-source", choices=["web", "mcp", "cli", "photoshop", "api"], help="filter by creation source")
     p.add_argument("--gallery", action="store_true", help="query the public gallery instead")
+    p.add_argument("--archived", action="store_true", help="only archived tunes; omitted selects unarchived tunes")
     p.add_argument("--limit")
     p.add_argument("--offset")
     p.set_defaults(func=cmd_tunes_list)
@@ -2518,6 +2542,10 @@ def build_parser(models_record=None):
     p.add_argument("--text", help="injected text (stored in characteristics.text); an empty string clears it")
     p.add_argument("--image-url", action="append", help="training image URL (repeatable)")
     p.add_argument("--image", action="append", help="local training image file (repeatable)")
+    p.add_argument("--image-caption", action="append",
+                   help="view caption per training image, one per image in --image-url order (repeatable): front, back, "
+                        "side, detail or logo; a close-up names its side, e.g. back detail. A generation asking for a "
+                        "front or back view drops images whose caption names the other side")
     p.set_defaults(func=cmd_tunes_create)
     p = tunes.add_parser("update", parents=[ws_parent], help="update a tune")
     p.add_argument("id")
@@ -2527,6 +2555,10 @@ def build_parser(models_record=None):
     p.add_argument("--text", help="injected text (stored in characteristics.text); omitted preserves it, an empty string clears it")
     p.add_argument("--sources", type=structured_argument("sources"), help="catalog provenance as a JSON array of source records")
     p.set_defaults(func=cmd_tunes_update)
+    p = tunes.add_parser("archive", parents=[ws_parent], help="archive a tune, hiding it from lists without deleting it")
+    p.add_argument("id")
+    p.add_argument("--unarchive", action="store_true", help="restore an archived tune instead")
+    p.set_defaults(func=cmd_tunes_archive)
 
     # prompts
     prompts = sub.add_parser("prompts", help="image/video generation records").add_subparsers(dest="sub", required=True)
@@ -2556,16 +2588,28 @@ def build_parser(models_record=None):
     p.add_argument("--base-pack-id", help="bind as a pack one-off")
     p.add_argument("--workspace-id")
     p.set_defaults(func=cmd_prompts_update)
+    p = prompts.add_parser("archive", parents=[ws_parent], help="archive a prompt, hiding it from lists without deleting it")
+    p.add_argument("id")
+    p.add_argument("--unarchive", action="store_true", help="restore an archived prompt instead")
+    p.set_defaults(func=cmd_prompts_archive)
+    p = prompts.add_parser("enhance", parents=[ws_parent], help="upscale a finished video or increase its frame rate, as a new paid prompt")
+    p.add_argument("id", help="prompt ID of a finished video")
+    p.add_argument("--video-upscale-model", choices=["seedvr2"], help="upscaler; pass this or --video-fps-model, not both")
+    p.add_argument("--video-upscale-target-resolution", choices=["720p", "1080p", "2k", "4k"], help="target for --video-upscale-model; defaults to 1080p")
+    p.add_argument("--video-fps-model", choices=["video_fps_increaser"], help="frame interpolation; pass this or --video-upscale-model, not both")
+    p.set_defaults(func=cmd_prompts_enhance)
     p = prompts.add_parser("attach", parents=[ws_parent], help="add a local image or MP4 to a prompt's results, e.g. a muxed film onto its video prompt")
     p.add_argument("id")
-    p.add_argument("file", help="PNG, JPEG, WebP or AVIF image, or MP4 video")
+    p.add_argument("file", nargs="?", help="PNG, JPEG, WebP or AVIF image, or MP4 video")
+    p.add_argument("--blob-signed-id", help="signed upload ID from create_upload; upload the bytes before attaching")
     p.set_defaults(func=cmd_prompts_attach, replace=False, replace_blob_id=None)
     images = sub.add_parser("images", help="manage prompt result images and videos").add_subparsers(dest="images_cmd", required=True)
     p = images.add_parser("replace", parents=[ws_parent], help="replace the sole result of the same media type and retain its original in debug history")
     p.add_argument("id", help="prompt ID")
-    p.add_argument("file", help="replacement image or MP4 video")
+    p.add_argument("file", nargs="?", help="replacement image or MP4 video")
+    p.add_argument("--blob-signed-id", help="signed upload ID from create_upload; upload the bytes before replacing")
     p.add_argument("--blob-id", dest="replace_blob_id", type=int, help="select a result when the prompt has multiple images or videos")
-    p.set_defaults(func=cmd_prompts_attach, replace=True)
+    p.set_defaults(func=cmd_prompts_attach, replace=True, blob_signed_id=None)
     p = prompts.add_parser("wait", parents=[ws_parent],
                            help="block until one or more prompts have images or a user_error")
     p.add_argument("ids", nargs="*", help="prompt ids (also accepted via --prompts-file or stdin)")
@@ -2599,6 +2643,13 @@ def build_parser(models_record=None):
     p.add_argument("--input-image", help="URL or local file to edit")
     p.add_argument("--inpaint-faces", action=argparse.BooleanOptionalAction, default=None,
                    help="enable or disable face inpainting; omit to use the model default")
+    p.add_argument("--inpaint-preset", choices=("strong", "identity"),
+                   help="face inpainting preset; enables face inpainting; cannot combine with inpaint_faces=false")
+    p.add_argument("--background-color", help="target background hex color, e.g. #ffffff; overrides the text flag")
+    p.add_argument("--create-crops", type=structured_argument("create_crops"), nargs="?", const=60,
+                   help="top/bottom crop size as a percentage (1-100); bare CLI flag uses 60; 0 disables crops")
+    p.add_argument("--lynx", action=argparse.BooleanOptionalAction, default=None,
+                   help="enable or disable Lynx processing using reference image metadata; overrides the text flag")
     p.add_argument("--mask-image", help="URL or local file to use as an inpainting mask")
     p.add_argument("--reference", "--images", dest="references", action="append", metavar="NAME=PATH_OR_URL",
                    help="create and attach a reference; repeat for each NAME=PATH_OR_URL (--images is an alias)")
@@ -2641,10 +2692,10 @@ def build_parser(models_record=None):
                    help="motion / action description; references use <faceid:TUNE_ID:1> TUNE_NAME")
     p.add_argument("--duration", help="seconds (model-dependent)")
     p.add_argument("--seed", help="generation seed; reuse a draft's seed to reproduce it at a higher resolution")
-    p.add_argument("--aspect-ratio", default="3:4", help="e.g. 3:4, 1:1, 16:9 (default: %(default)s)")
+    p.add_argument("--aspect-ratio", help="e.g. 16:9, 9:16, 1:1 (model-dependent); omit to follow the model default and any frame or reference media")
     p.add_argument("--resolution", help=resolution_help(
         models_record, "first-frame image resolution (video resolution is set by --video-resolution)"))
-    p.add_argument("--num-images", help="override config default_num_images; otherwise 2")
+    p.add_argument("--num-images", help="first-frame images; video prompts take 1, which Astria sets when omitted")
     p.add_argument("--input-image", help=argparse.SUPPRESS)
     p.add_argument("--reference", "--images", dest="references", action="append", metavar="NAME=PATH_OR_URL",
                    help="create and attach a reference; repeat for each NAME=PATH_OR_URL (--images is an alias)")
@@ -2654,16 +2705,22 @@ def build_parser(models_record=None):
                        "attach an ordered raw image reference; repeat for each image"))
     p.add_argument("--first-frame", help="URL or file overriding the rendered first frame")
     p.add_argument("--last-frame", help="URL or file for keyframe models")
-    p.add_argument("--input-video", help="URL or file for motion-control models")
-    p.add_argument("--audio-reference", help=video_capability_help(
-        models_record, "supports_audio_reference",
-        "URL or file — reference audio track the video is driven by"))
+    p.add_argument("--input-video", dest="video_references", action="append", help=argparse.SUPPRESS)
+    p.add_argument("--video-reference", dest="video_references", action="append", metavar="PATH_OR_URL",
+                   help="URL or file for a source or reference video; repeat for each, in the order the prompt names them "
+                        "(@Video1, @Video2); list_models gives each model's max_reference_videos")
+    p.add_argument("--audio-reference", dest="audio_references", action="append", metavar="PATH_OR_URL",
+                   help=video_capability_help(
+                       models_record, "supports_audio_reference",
+                       "URL or file for a reference audio track; repeat for each, in the order the prompt names them "
+                       "(@Audio1, @Audio2); list_models gives each model's max_reference_audios"))
     p.add_argument("--generate-audio", action=argparse.BooleanOptionalAction, default=None,
                    help=video_capability_help(
                        models_record, "generates_audio",
                        "generate a soundtrack (picks the audio version of families that price it separately); omit for silent"))
     p.add_argument("--wait", action="store_true")
     p.add_argument("--skill-name", help="originating database skill name from get_skill; keep the main workflow name across helper skills; omit for unrelated generations")
+    p.add_argument("--order-id", help="associate the video with an accessible order")
     p.set_defaults(func=cmd_video)
 
     # music
@@ -2683,6 +2740,7 @@ def build_parser(models_record=None):
     p.add_argument("text", help="song description: genre, mood, instruments, vocals and tempo")
     p.add_argument("--model", default=None, help=music_model_help(models_record))
     p.add_argument("--lyrics", help=lyrics_help(models_record))
+    p.add_argument("--audio-reference", help="MiniMax Music Cover source: MP3 with vocals, 6 seconds to 6 minutes; prompt 10-300 characters; omit lyrics and instrumental")
     p.add_argument("--instrumental", action="store_true", help="make a song without vocals; cannot be combined with lyrics")
     p.add_argument("--num-images", default="1", help="number of songs to generate (default: %(default)s)")
     p.add_argument("--wait", action="store_true", help="block until the song is ready")
@@ -2706,13 +2764,22 @@ def build_parser(models_record=None):
                    help="existing replacement reference (repeatable)")
     p.add_argument("--reference", dest="references", action="append", metavar="[NAME=]PATH_OR_URL",
                    help="create a replacement reference; omit NAME to auto-detect it (repeatable)")
-    description = p.add_mutually_exclusive_group()
-    description.add_argument("--description", help="source-video description; skips video inspection")
-    description.add_argument("--description-file", help="read source-video description from a UTF-8 file")
     p.add_argument("--base-pack-id", type=int, help="bind the result as a pack one-off")
     p.add_argument("--order-id", type=int, help="associate the result with an accessible order")
     p.add_argument("--wait", action="store_true", help="block until the generated video is ready")
     p.set_defaults(func=cmd_variate)
+
+    inspections = sub.add_parser("video-inspections", help="start and poll video inspections").add_subparsers(dest="sub", required=True)
+    p = inspections.add_parser("create", parents=[ws_parent], help="start an inspection and return its id immediately")
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--file-url", help="public HTTPS video URL; supply exactly one of --file-url or --blob-signed-id")
+    source.add_argument("--blob-signed-id", help="signed ID of a completed video upload; supply exactly one source")
+    p.add_argument("--tune-id", action="append", metavar="ID",
+                   help="reference whose appearance should be removed from the description (repeatable)")
+    p.set_defaults(func=cmd_video_inspections_create)
+    p = inspections.add_parser("get", help="read an inspection's current status and result")
+    p.add_argument("id", help="inspection ID returned by video-inspections create")
+    p.set_defaults(func=cmd_video_inspections_get)
 
     p = sub.add_parser("inspect-video", parents=[ws_parent],
                        help="describe a video as timestamped text-to-video prompt text")
@@ -2721,9 +2788,19 @@ def build_parser(models_record=None):
                    help="reference whose appearance should be removed from the description (repeatable)")
     p.set_defaults(func=cmd_inspect_video)
 
+    p = sub.add_parser("classify-image", parents=[ws_parent], help="identify an image reference's subject class and characteristics")
+    p.add_argument("source", help="public HTTPS image URL; the CLI also accepts a local image")
+    p.add_argument("--class-name", action="append", help="optional allowed subject class (repeatable)")
+    p.set_defaults(func=cmd_classify_image)
+
+    p = sub.add_parser("video-edit-prompt", parents=[ws_parent], help="compose a Variate edit prompt from a brief and saved reference IDs")
+    p.add_argument("--brief", default="", help="requested edit; optional when references are supplied")
+    p.add_argument("--tune-id", action="append", help="existing replacement reference ID (repeatable)")
+    p.set_defaults(func=cmd_compose_video_edit)
+
     p = sub.add_parser("inspect", parents=[ws_parent],
                        help="describe an image as image-generation prompt text")
-    p.add_argument("source", help="local image file or public HTTPS image URL")
+    p.add_argument("source", help="public HTTPS image URL; upload local images with create_upload first (the CLI also accepts local image files)")
     p.add_argument("--name", action="append",
                    help="reference name whose appearance should be removed from the description (repeatable)")
     p.set_defaults(func=cmd_inspect)
@@ -2741,10 +2818,18 @@ def build_parser(models_record=None):
     p = packs.add_parser("list", parents=[ws_parent], help="List reusable Astria photoshoot templates with their IDs and titles")
     p.add_argument("--limit")
     p.add_argument("--offset")
+    p.add_argument("--sort", choices=["recently_used"], default="recently_used",
+                   help="the templates last generated from in this workspace first, never-used ones after (default: %(default)s)")
     p.set_defaults(func=cmd_packs_list)
     p = packs.add_parser("get", parents=[ws_parent], help="get a pack and its template prompts")
     p.add_argument("slug", help="pack slug or id")
     p.set_defaults(func=cmd_packs_get)
+    p = packs.add_parser("text", parents=[ws_parent], help="read a pack's prompts as text, one section per product class")
+    p.add_argument("slug", help="pack slug or id")
+    p.add_argument("--class", dest="class_name", help="only this section; the reply's first lines count them")
+    p.add_argument("--limit", help="prompts per reply (at most 50, the default)")
+    p.add_argument("--offset", help="prompts to skip, only when the user asks for more than a reply held")
+    p.set_defaults(func=cmd_packs_text)
     p = packs.add_parser("create", parents=[ws_parent], help="create a pack")
     p.add_argument("--title", required=True)
     p.add_argument("--subtitle")
@@ -2791,6 +2876,8 @@ def build_parser(models_record=None):
                    help="override: face inpainting on/off")
     p.add_argument("--attr", action="append", metavar="KEY=VALUE",
                    help="any other prompt attribute override (repeatable), e.g. --attr super_resolution=true")
+    p.add_argument("--prompt-attributes", type=structured_argument("prompt_attributes"),
+                   help="JSON object of extra prompt attribute overrides with string values; overrides matching named flags")
     p.set_defaults(func=cmd_packs_run)
 
     # workspaces
@@ -2810,7 +2897,13 @@ def build_parser(models_record=None):
     wu.add_argument("--title")
     wu.add_argument("--url")
     wu.add_argument("--landing-page-html")
+    wu.add_argument("--brief", help="regenerate the entire landing page from this brief; replaces existing HTML")
     wu.set_defaults(func=cmd_workspaces_update)
+    wa = workspaces.add_parser("attach-images", parents=[ws_parent], help="save uploaded or remote images to a workspace")
+    wa.add_argument("id")
+    wa.add_argument("--signed-id", dest="signed_ids", action="append", help="signed blob ID from a completed upload (repeatable)")
+    wa.add_argument("--image-url", dest="image_urls", action="append", help="public HTTPS image URL, including completed Astria direct uploads (repeatable)")
+    wa.set_defaults(func=cmd_workspaces_attach_images)
 
     # agent handoff
     agent = sub.add_parser("agent", help="Astria embedded agent").add_subparsers(dest="sub", required=True)
@@ -2917,23 +3010,35 @@ def build_parser(models_record=None):
 # The command tree above is the parameter source of truth for CLI and MCP.
 # Only transport policy lives here; no second set of API payload builders.
 OPERATION_POLICIES = {
+    "classify_image": (("classify-image",), False, set()),
+    "compose_video_edit": (("video-edit-prompt",), False, set()),
+    "inspect_image": (("inspect",), False, set()),
+    "inspect_video": (("video-inspections", "create"), False, set()),
+    "get_video_inspection": (("video-inspections", "get"), True, set()),
     "list_models": (("models",), True, {"refresh"}),
     "list_workspaces": (("workspaces", "list"), True, set()),
     "list_references": (("tunes", "list"), True, set()),
     "get_reference": (("tunes", "get"), True, set()),
     "update_reference": (("tunes", "update"), False, set()),
-    "create_reference": (("tunes", "create"), False, {"image"}),
+    "archive_reference": (("tunes", "archive"), False, set()),
+    "create_reference": (("tunes", "create"), False, {"image", "model", "model_type"}),
     "generate_images": (("generate",), False, {"wait", "video_prompt"}),
     "generate_video": (("video",), False, {"wait", "input_image"}),
     "generate_music": (("music",), False, {"wait"}),
     "list_prompts": (("prompts", "list"), True, set()),
     "get_prompt": (("prompts", "get"), True, set()),
     "update_prompt": (("prompts", "update"), False, set()),
+    "archive_prompt": (("prompts", "archive"), False, set()),
+    "enhance_video": (("prompts", "enhance"), False, set()),
+    "attach_prompt_media": (("prompts", "attach"), False, {"file"}),
+    "replace_prompt_media": (("images", "replace"), False, {"file"}),
     "list_templates": (("packs", "list"), True, set()),
     "get_template": (("packs", "get"), True, set()),
+    "get_template_text": (("packs", "text"), True, set()),
     "create_template": (("packs", "create"), False, set()),
     "update_template": (("packs", "update"), False, set()),
     "create_workspace": (("workspaces", "create"), False, set()),
+    "attach_workspace_images": (("workspaces", "attach-images"), False, set()),
     "get_workspace": (("workspaces", "get"), True, set()),
     "update_workspace": (("workspaces", "update"), False, set()),
     "run_template": (("packs", "run"), False, {"image", "attr"}),
@@ -2946,13 +3051,11 @@ CLI_ONLY_COMMANDS = {
     ("login",): "Host-local credential storage", ("logout",): "Host-local credential removal",
     ("whoami",): "MCP exposes authenticated get_profile separately", ("config",): "Host-local configuration",
     ("upgrade",): "Installs the local executable", ("prompts", "wait"): "Blocking local polling; MCP uses get_prompt/events",
-    ("variate",): "Multi-stage inspection/generation workflow not yet exported",
-    ("inspect-video",): "Blocking inspection workflow not yet exported", ("inspect",): "Inspection not yet exported",
+    ("variate",): "Local orchestration; MCP uses classify_image/create_reference, compose_video_edit, then generate_video with video_references",
+    ("inspect-video",): "Local upload and blocking convenience; MCP uses inspect_video and get_video_inspection",
     ("download",): "Writes local files", ("agent", "handoff"): "Embedded-agent session handoff",
-    ("prompts", "attach"): "Local-file input, uploaded through the Darkroom's save path",
-    ("images", "replace"): "Local-file replacement with original retained in debug history",
     ("landing", "get"): "Local HTML extraction; MCP get_workspace returns metadata",
-    ("landing", "set"): "Local-file input; MCP update_workspace accepts supplied HTML",
+    ("landing", "set"): "Local-file input; MCP update_workspace accepts supplied HTML or a regeneration brief",
     ("cache", "refresh"): "Local cache", ("cache", "path"): "Local cache",
     ("cache", "get"): "Local cache", ("cache", "find", "tunes"): "Local cache",
     ("cache", "find", "prompts"): "Local cache", ("cache", "find", "packs"): "Local cache",
@@ -2978,27 +3081,39 @@ def validate_operation_coverage():
             f"stale={sorted((exposed | excluded) - commands)}, duplicate={sorted(exposed & excluded)}")
 
 OPERATION_DESCRIPTIONS = {
+    'classify_image': 'Identify the subject class and characteristics of an image before creating a replacement reference. Supply source as a public HTTPS image URL, uploading local files with create_upload first. Optional class_name entries restrict the allowed classes. Returns class_name and available caption/description metadata, or error. Use the class_name with create_reference. May invoke a paid provider; requires an idempotency_key for safe retries.',
+    'compose_video_edit': 'Prepare the Variate workflow when the user wants to edit an existing video while preserving its shots, timing and performance. Supply brief and/or saved replacement reference IDs in tune_id. For new reference images, first use classify_image if their class is unknown, then create_reference. Returns video_prompt, video_model, generate_audio and num_images for generate_video. Submit those returned fields with the source video HTTPS URL as the only item of video_references, and the same workspace; use get_prompt to follow the generation. No source-video inspection is needed. This tool only writes the edit prompt and does not generate a video. Requires an idempotency_key; reuse it for identical retries.',
+    'inspect_image': 'Describe an image as image-generation prompt text using Astria. Pass source as a public HTTPS image URL. For a local image, first complete its create_upload upload and use the returned URL. Optional name entries omit the appearance of those named reference subjects, such as dress or shoes. This is a paid inspection. Requires an idempotency_key; reuse the same key and arguments for an identical retry. Returns description synchronously, or error if inspection fails. Does not generate an image.',
+    'inspect_video': 'Start a paid video inspection to describe a video as timestamped text-to-video prompt text. Supply exactly one of file_url (public HTTPS) or blob_signed_id from a completed create_upload video upload. Optional tune_id reference IDs remove those subjects appearances from the description. Requires an idempotency_key; reuse the same key and arguments for a retry. Returns an inspection id and pending status immediately. Poll get_video_inspection every 2-5 seconds until completed or failed; do not resubmit to check progress.',
+    'get_video_inspection': 'Poll a video inspection started with inspect_video. Pass its inspection id. Returns status pending, processing, completed or failed; completed includes description and available model/provider/usage metadata, failed includes error. Poll every 2-5 seconds while pending or processing and stop on completed or failed. Inspections expire one hour after their last update and are visible only to the user who started them. An unknown or expired inspection returns an error. Does not start an inspection or charge credits.',
+    'enhance_video': 'Use this when the user asks to upscale a finished Astria video or increase its frame rate. Pass the prompt id of a completed video and either video_upscale_model or video_fps_model, not both; for both, call again with the first result id once it completes. Creates a new paid prompt and leaves the original unchanged. Each enhancement applies once per video. Use a unique idempotency_key per action and reuse it only for an identical retry. Returns the submitted prompt with id and cost_mc; check get_prompt for the final video or errors without resubmitting.',
+    'attach_prompt_media': 'Append an uploaded image or MP4 to an existing prompt, for example a finished muxed film. First prepare an upload with create_upload and successfully upload its bytes, then pass its blob_signed_id and the prompt id. Supports PNG, JPEG, WebP, AVIF and MP4. Preserves existing results; does not generate or replace media. Requires an idempotency_key. Returns the saved asset and updated prompt; use get_prompt to view all results.',
+    'replace_prompt_media': 'Replace a saved image or MP4 result only when requested. First successfully upload the replacement with create_upload, then pass its blob_signed_id and the prompt id. Omit replace_blob_id only when the prompt has exactly one result of the replacement media type; otherwise select its blob_id from get_prompt. Retains the original in debug history and preserves other results. Does not generate media. Requires an idempotency_key; reuse the same key and arguments for a retry. Returns the saved asset and updated prompt; use get_prompt with expand=["debug_images"] to inspect history.',
     'create_workspace': 'Create a separate brand/team workspace when requested. Supply its title and optional canonical website URL. Returns the workspace ID; use it on subsequent references, templates and generations. Does not invite members or generate images.',
-    'get_workspace': 'Inspect a selected workspace by ID, including its brand website and metadata. Does not create or change the workspace.',
-    'update_workspace': 'Update a selected workspace title, brand website URL or supplied landing page HTML. Does not publish the workspace, invite members or change billing. Provide only the fields to change.',
+    'get_workspace': 'Inspect a selected workspace by ID, including its brand website, landing_page_html and attached images with persistent URLs. Does not create or change the workspace.',
+    'attach_workspace_images': 'Attach images to a selected workspace before using them on its landing page. Supply image_urls for public HTTPS images (including completed Astria direct uploads), signed_ids from completed create_upload uploads, or both. Reuses Astria uploads and imports external images into workspace storage. Supports PNG, JPEG, WebP, AVIF and GIF up to 100 MB each. Preserves existing workspace images and does not generate media. Returns workspace_id and images with id, blob_id, url, filename and content_type; use the returned URLs in landing_page_html. Requires an idempotency_key for safe retries.',
+    'update_workspace': 'Update a selected workspace title, brand website URL or supplied landing page HTML. Does not publish the workspace, invite members or change billing. Provide only the fields to change. Set brief only when the user requests full landing-page regeneration; it replaces existing HTML. Use get_workspace to read the generated HTML. Requires an idempotency_key for safe retries.',
     'create_template': 'Create a reusable photoshoot template container in the selected workspace. Supply a title, model and optional main product category; author its shots with generate_images using the returned pack_id, then set reference categories with update_template. Creating the container does not generate images.',
     'update_template': 'Update an existing template title, subtitle or reference categories. Does not generate images or replace its prompts. Inspect get_template before changing its category slots.',
     'update_reference': 'Update a selected reference title, subject class, short description, injected text or verified catalog source records. text sets characteristics.text; omit it to preserve the current text or pass an empty string to clear it. Other characteristics are preserved. Sources include provider, account_key, resource_type, external_id and captured metadata. Does not retrain the reference or generate images.',
     'update_prompt': 'Assign an existing prompt to a template, clear template membership, or move it to an authorized workspace. Pass pack_id or base_pack_id as the string null to clear that assignment. Does not generate, delete or retry an image.',
-    'list_models': 'Use this when choosing an Astria image, video or music model or checking supported media inputs, image resolutions, aspect ratios, lyrics limits, song prices, and defaults. Pass type (image, video or music) to get only that catalog. Returns the live model catalog and model names/tune IDs; does not generate media or spend credits. Use the explicit user selection or catalog default for generation.',
+    'archive_prompt': 'Archive an image, video or music prompt only when the user asks to archive, hide or clean up that result. Pass its id. Archiving hides the prompt from galleries and list_prompts without deleting its media or refunding credits; list_prompts archived=true finds archived prompts. Set unarchive=true to restore one. Requires an idempotency_key.',
+    'archive_reference': 'Archive a saved reference only when the user asks to archive, hide or clean up that person, product or garment. Pass its id. Archiving hides the reference from list_references without deleting it or its training images; list_references archived=true finds archived references; templates and prompts that use it keep working. Set unarchive=true to restore one. Requires an idempotency_key. Returns id and archived.',
+    'list_models': 'Use this when choosing an Astria image, video or music model or checking supported media inputs, image resolutions, aspect ratios, lyrics limits, song prices, and defaults. Pass type (image, video or music) to get only that catalog. Returns the live model catalog and model names/tune IDs; does not generate media or spend credits. For video generation, submit null model and resolution fields unless the user explicitly selected them; let Astria resolve defaults. For images and music, use the explicit user selection or catalog default.',
     'list_workspaces': 'Use this when finding an Astria workspace for a team or brand photoshoot. Returns authorized workspace IDs; expand migration to include their website URLs for duplicate detection. Use the selected ID consistently for references, templates, and generations. Does not create a workspace or generate media.',
     'list_references': 'Use this when finding a saved person, model, garment, product, or SKU for consistent photos, virtual try-on, headshots, or video. Search title/product name/SKU; gallery=true finds public model references. Returns reusable reference IDs and subject classes. Does not create references or generate media; inspect a selected match with get_reference.',
     'get_reference': 'Use this when inspecting a selected Astria identity or product reference and its training images before a photoshoot or try-on. Returns the saved subject class and reference details. A reference token uses <model_type:ID:1> followed by that class. Does not create or alter the reference.',
     'create_reference': 'Use this when a supplied person or product needs one reusable Astria reference for consistent headshots, virtual try-on, product shots, or multiple scenes. Provide real HTTPS photo URLs, a subject class in name, and a human label in title. Reuse an existing reference when available. Creates paid content only within the requested generation/reference scope; requires an idempotency_key. Returns the new reference ID and class; reuse them across generations. Does not return a finished photoshoot.',
     'generate_images': 'Use this when the user asks to create or edit images: product photography, ecommerce packshots, on-model fashion/virtual try-on, lookbooks, professional headshots from supplied photos, or consistent people/products across scenes. Reference tokens in text preserve selected subjects; input_image edits an existing HTTPS image, and mask_image limits an edit. Separate scene briefs need separate submissions; num_images varies one brief. model is optional: omit it for the catalog default image model, and call list_models type=image only to choose another model or check resolutions. Respect an explicitly chosen provider. Prompt advice or a text-only storyboard is not a generation request. Creates paid Astria content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for finished assets or errors without resubmitting.',
-    'generate_video': 'Use this when the user requests an Astria video, animating a photo/product, or motion with consistent person/product references. Provide video_prompt. video_model (a video_model_families name) and video_resolution are optional: omitted, they use default_video_model_family at its default resolution; call list_models type=video only to choose another model or check its capabilities. generate_audio=true picks the audio output of families that offer one. Use first_frame/last_frame for image-led video and input_video/audio_reference only when the chosen model supports them. Do not call for storyboard writing, prompt advice, or an explicitly chosen other provider. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for final video assets or errors without resubmitting.',
-    'generate_music': 'Use this when the user asks for an Astria song, jingle, soundtrack, background music or instrumental track. Provide text as the song description (genre, mood, instruments, vocals, tempo); pass lyrics with the model\'s section tags such as [Verse] and [Chorus] to sing given words, omit lyrics to let the model write them, or set instrumental=true for no vocals. model is optional and defaults to default_music_model; call list_models type=music to choose another music model or check lyrics length limits, section tags and the price of each kind of song. Do not call for lyric writing or music advice alone, or for a video soundtrack (use generate_video generate_audio). Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id; check get_prompt for the finished audio or errors without resubmitting.',
+    'generate_video': 'Use this when the user requests an Astria video, animating a photo/product, or motion with consistent person/product references. Provide video_prompt. Submit video_model=null and video_resolution=null unless the user explicitly selected those settings; Astria resolves its defaults. Do not select a model or resolution yourself or copy catalog defaults into the request. Call list_models type=video only to resolve an explicit selection or check capabilities. generate_audio=true picks the audio output of families that offer one. Use first_frame/last_frame for image-led video and video_references/audio_references only when the chosen model supports them; the prompt names their items by position as @Video1 and @Audio1. Do not call for storyboard writing, prompt advice, or an explicitly chosen other provider. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id and an embedded result preview; check get_prompt for final video assets or errors without resubmitting.',
+    'generate_music': 'Use this when the user asks for an Astria song, jingle, soundtrack, background music or instrumental track. Provide text as the song description (genre, mood, instruments, vocals, tempo); pass lyrics with the model\'s section tags such as [Verse] and [Chorus] to sing given words, omit lyrics to let the model write them, or set instrumental=true for no vocals. model is optional and defaults to default_music_model; call list_models type=music to choose another music model or check lyrics length limits, section tags and the price of each kind of song. For MiniMax, audio_reference selects Music Cover: an MP3 with vocals, 6 seconds to 6 minutes, a 10-300 character style prompt, and no lyrics or instrumental flag. It does not guarantee preservation of exact event timing. Do not call for lyric writing or music advice alone; use generate_video generate_audio for native video sound. Creates paid content within the requested scope; use a unique idempotency_key per action and reuse it only for an identical retry. Returns a submitted prompt with id and tune_id; check get_prompt for the finished audio or errors without resubmitting.',
     'list_prompts': 'Use this when finding recent Astria images/videos, checking existing submissions after an uncertain response, or locating outputs from a saved photoshoot run. Filter by reference, template, order, text, review status, source, or media type. Does not generate or charge credits. Results include prompt IDs for get_prompt; expand prompt.comments to inspect review feedback.',
     'get_prompt': 'Use this when checking progress, finished images/videos, or errors for an existing Astria generation. Pass its returned id. Returns the current prompt and available assets with an embedded preview; no generation is submitted or charged. Pending or failed results must not be treated as a new generation request. expand prompt.comments includes image review feedback.',
-    'list_templates': 'Use this when finding an existing reusable Astria photoshoot/template (also called a pack) for product images, lookbooks, or headshots. Returns accessible template names/slugs; inspect a selected template with get_template before run_template. Browsing does not run a photoshoot or spend credits.',
+    'list_templates': 'Use this when finding an existing reusable Astria photoshoot/template (also called a pack) for product images, lookbooks, or headshots. Returns accessible template names/slugs and thumbnails, most recently used first; inspect a selected template with get_template before run_template. Browsing does not run a photoshoot or spend credits.',
     'get_template': 'Use this when resolving a selected Astria photoshoot template by slug or ID before running it or inspecting its prompts, reference slots, and baseline pricing. Does not generate images or modify the template. Preserve the returned reference-slot order when calling run_template.',
-    'run_template': 'Use this when the user asks to run a saved Astria photoshoot/template on their person or product, repeat an existing lookbook with a new SKU, or generate portraits from a selected pack. Resolve the template and reference slots first with get_template; pass tune_id entries in slot order, supported photo inputs, or tune_replacements mapping original IDs to replacement ID arrays to swap selected products while retaining other references. Do not substitute one generic image for a requested template run, and do not run a template for browsing or pricing advice. Creates paid Astria content within the requested scope; requires an idempotency_key. Returns the submitted order/prompt IDs; use list_prompts to find prompt IDs and get_prompt to check outputs without rerunning.',
-    'start_agent_run': 'Use this when the user asks Astria to carry out a multi-step creative job end to end by running an Astria agent skill, such as /music-video (song, video and the final muxed MP4), rather than a single generation. Pass the workspace ID and the request as message: start it with /skill-name and include every HTTPS media URL the job needs (upload local files with create_upload first). The agent works in Astria for several minutes and generates paid media within the request; requires an idempotency_key. Returns a task whose id identifies the run; poll get_agent_run until status.state is completed, input_required, failed or canceled. Do not use it for one image, video or song (use generate_images, generate_video or generate_music).',
+    'get_template_text': 'Use this when reading what a template\'s prompts say, to learn from or rebuild them: each prompt\'s verbatim text, aspect ratio, model, references and example images, as plain text with one section per product class. A reply holds at most 50 prompts and counts the sections; read further with offset only when the user asks for more. Does not generate images or modify the template. Use get_template for its reference slots before run_template.',
+    'run_template': 'Use this when the user asks to run a saved Astria photoshoot/template on their person or product, repeat an existing lookbook with a new SKU, or generate portraits from a selected pack. Resolve the template and reference slots first with get_template; pass tune_id entries in slot order, supported photo inputs, or tune_replacements mapping original IDs to replacement ID arrays to swap selected products while retaining other references. Do not substitute one generic image for a requested template run, and do not run a template for browsing or pricing advice. Creates paid Astria content within the requested scope; requires an idempotency_key. prompt_attributes supplies additional per-prompt overrides as a JSON object of string values and takes precedence over matching named parameters. Returns the submitted order/prompt IDs; use list_prompts to find prompt IDs and get_prompt to check outputs without rerunning.',
+    'start_agent_run': 'Delegate work to an Astria agent only when the user explicitly requests delegation or a required step cannot run in the current host. Execute workflows directly with available Astria tools and local capabilities; a named skill or multi-step request alone does not require an agent run. Assess available tools rather than desktop, web, or embedded client labels. Delegate only the necessary stage when practical: for muxing, pass existing video and audio URLs instead of regenerating them. Pass the workspace ID and a scoped message, starting with /skill-name when applicable, with every required HTTPS media URL (upload local files with create_upload first). The run may generate paid media within the request; requires an idempotency_key. Returns a task id; poll get_agent_run until completed, input_required, failed or canceled. Use generate_images, generate_video or generate_music for direct generations. An Astria agent run must never start another run.',
     'get_agent_run': 'Use this to follow a run started with start_agent_run; poll every 15-30 seconds while status.state is submitted or working. Returns the task: status.state (submitted, working, input_required, completed, failed or canceled), status.message with the agent\'s latest words, pending questions, artifacts and an Astria url. On input_required, put the questions to the user and answer them with reply_agent_run. Artifacts are the results: a file part has a downloadable uri (such as the final MP4) and a data part has a prompt_id for get_prompt. Does not start or charge anything.',
     'reply_agent_run': 'Use this when get_agent_run reports input_required. Pass the run id, the question\'s tool_call_id and answers mapping each question text to the chosen option label (an array of labels for multi-select, or the user\'s own words). The run resumes and may generate paid media within its original request; requires an idempotency_key. Then poll get_agent_run; the task can still show the answered question for a few seconds.',
     'cancel_agent_run': 'Use this only when the user asks to stop a run started with start_agent_run. Interrupts the working agent; generations it already submitted still finish and are billed. Only the user who started the run can cancel it. Requires an idempotency_key. Returns the task; get_agent_run reports canceled once the run stops.',
@@ -3006,8 +3121,8 @@ OPERATION_DESCRIPTIONS = {
 
 
 REMOTE_MEDIA_ARGUMENTS = {
-    "image_url", "input_image", "mask_image", "references", "image_references",
-    "first_frame", "last_frame", "input_video", "audio_reference",
+    "image_urls", "image_url", "input_image", "mask_image", "references", "image_references",
+    "first_frame", "last_frame", "video_references", "audio_references", "audio_reference", "file_url", "source",
 }
 
 
@@ -3034,7 +3149,7 @@ def operation_parser(path):
 # Updates replace saved metadata or assignments rather than only adding content;
 # cancelling stops an agent's work in progress.
 DESTRUCTIVE_OPERATIONS = {
-    "update_reference", "update_prompt", "update_template", "update_workspace", "cancel_agent_run",
+    "update_reference", "update_prompt", "update_template", "update_workspace", "cancel_agent_run", "replace_prompt_media",
 }
 
 
@@ -3065,6 +3180,10 @@ def operation_catalog():
                 spec["description"] = mcp_help(parser, action.help.replace("%(default)s", str(action.default)))
             if action.dest in JSON_ARGUMENT_SCHEMAS:
                 spec = JSON_ARGUMENT_SCHEMAS[action.dest].copy() | {"description": mcp_help(parser, action.help)}
+            if name == "generate_video" and action.dest in ("video_model", "video_resolution"):
+                spec = {"anyOf": [{"type": "string"}, {"type": "null"}],
+                    "description": "User-selected video model family; submit null for Astria defaults." if action.dest == "video_model"
+                    else "User-selected video resolution; submit null for Astria defaults."}
             properties[action.dest] = spec
             if action.required or not action.option_strings:
                 required.append(action.dest)
@@ -3073,6 +3192,8 @@ def operation_catalog():
             required.append("text")
         if name == "create_reference":
             required.append("image_url")
+        if name in ("attach_prompt_media", "replace_prompt_media"):
+            required.append("blob_signed_id")
         if name == "start_agent_run":
             required.append("workspace")
         if not readonly:
@@ -3085,8 +3206,10 @@ def operation_catalog():
             "description": OPERATION_DESCRIPTIONS[name],
             "inputSchema": {"type": "object", "properties": properties,
                             "required": list(dict.fromkeys(required)), "additionalProperties": False},
-            "outputSchema": {"type": "object", "properties": {"result": {}},
-                             "required": ["result"], "additionalProperties": False},
+            # A text result is the reply's content itself, with nothing structured to validate.
+            **({} if API_OPERATIONS[name]["result"].get("text") else {
+                "outputSchema": {"type": "object", "properties": {"result": {}},
+                                 "required": ["result"], "additionalProperties": False}}),
             "annotations": {"readOnlyHint": readonly, "destructiveHint": name in DESTRUCTIVE_OPERATIONS,
                             "openWorldHint": not readonly},
             "securitySchemes": [{"type": "oauth2", "scopes": []}],
@@ -3118,7 +3241,7 @@ def operation_contract():
         if unmapped:
             raise AstriaError(f"{name} has unmapped parameters: {sorted(unmapped)}")
         operations[name] = {**definition,
-            "defaults": {**{spec[1]: None for spec in definition["fields"]},
+            "defaults": {**{spec[1]: parser.get_default(spec[1]) for spec in definition["fields"]},
                          **{action.dest: action.default for action in actions}},
             "integer_arguments": [action.dest for action in actions if action.type is int]}
     return {"version": 1, "operations": operations, "cli_only_commands": {" ".join(path): reason for path, reason in CLI_ONLY_COMMANDS.items()}, "prompt_filters": PROMPT_FILTERS,
@@ -3136,7 +3259,7 @@ def run_operation(name, arguments, transport):
     if unknown or missing:
         raise AstriaError(f"Invalid arguments: unknown={sorted(unknown)}, missing={sorted(missing)}")
     parser = operation_parser(path)
-    values = {action.dest: action.default for action in parser._actions if action.dest != "help"}
+    values = {**parser._defaults, **{action.dest: action.default for action in parser._actions if action.dest != "help"}}
     for key, value in arguments.items():
         spec = schema["properties"][key]
         if not validate_argument(spec, value):
