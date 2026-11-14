@@ -55,16 +55,22 @@ def validate_tool_examples(sources):
                 require(set(schema["required"]) <= arguments.keys(), f"missing arguments in {path}: {name}")
                 for key, value in arguments.items():
                     field = schema["properties"][key]
-                    valid = {
-                        "string": isinstance(value, str),
-                        "boolean": isinstance(value, bool),
-                        "array": isinstance(value, list) and all(isinstance(item, str) for item in value),
-                    }[field["type"]]
-                    require(valid, f"invalid {name}.{key} type in {path}")
-                    if "enum" in field:
-                        require(value in field["enum"], f"invalid {name}.{key} choice in {path}")
-                    if field["type"] == "array" and "enum" in field["items"]:
-                        require(all(item in field["items"]["enum"] for item in value), f"invalid {name}.{key} choices in {path}")
+                    require(valid_example_value(value, field), f"invalid {name}.{key} value in {path}")
+
+
+def valid_example_value(value, field):
+    if "anyOf" in field:
+        return any(valid_example_value(value, alternative) for alternative in field["anyOf"])
+    valid = {
+        "string": isinstance(value, str),
+        "boolean": isinstance(value, bool),
+        "null": value is None,
+        "array": isinstance(value, list),
+    }[field["type"]]
+    if not valid or ("enum" in field and value not in field["enum"]):
+        return False
+    return all(valid_example_value(item, field["items"]) for item in value) if field["type"] == "array" else True
+
 
 
 def validate_grok(claude):

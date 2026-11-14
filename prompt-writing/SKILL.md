@@ -9,11 +9,11 @@ Always write generation prompt text in English, even when the user communicates
 in another language. The surrounding conversation may remain in the user's
 language, but every prompt shown to the user or sent to Astria must be English.
 
-Before writing a prompt, use the connected MCP tools (see **astria-api**):
+Before writing a prompt, use the connected MCP tools and their live input schemas:
 
 - `list_prompts` with `limit: "20"` — their recent prompts, to learn their style and parameters.
 - `list_templates` — their packs. If the request is about a specific subject (e.g. a shirt), find a pack whose `main_class_name` matches and inspect its template prompts using `list_prompts` and `pack_id`.
-- `list_references` — their references/tunes. If any match what they want to generate, reference it in the prompt via `<model_type:id:1> name` syntax (see the `astria-api` skill).
+- `list_references` — their references/tunes. If any match what they want to generate, reference it in the prompt via `<model_type:id:1> name` syntax.
 
 Do not send the user off to browse packs or tunes themselves — query with the
 tools and bring concrete suggestions back to them. When offering choices, your
@@ -21,14 +21,14 @@ ask-user question tool (`AskUserQuestion` in Claude Code, `ask_user` in the
 Astria chat agent) with image thumbnails helps them pick.
 
 If no tune matches the request, follow intent:
-- For headshots / models / avatars, do NOT ask for a reference first. Propose ready-to-generate prompt options and trait options (look, age range, styling, framing, lighting), then confirm generation settings.
+- For an original fictional person, describe the requested appearance in the image prompt. For portraits of a real person, use their supplied photos or a saved reference; request photos when neither is available. Keep advice-only requests text-only.
 - For product or person-specific identity requests where likeness matters, ask the user to provide a reference image (upload it as a tune using `create_reference` and an accessible HTTPS image URL, or drag it into the prompt box in the web app).
 - Do not suggest web search for this flow.
 
 For a prompt-writing request, show the prompt for review before generating.
 For an explicit generation request, use the requested image count and settings;
 clarify only settings that materially affect the result and are missing. Submit
-through `generate_images` with a fresh idempotency key (see **astria-api**).
+through `generate_images` with a fresh idempotency key.
 
 # Types of request
 
@@ -52,16 +52,11 @@ one or ask for a recommendation.
 
 ## Default intent mapping
 
-If the user asks to create "models", "avatars", or "headshots", interpret this
-as a request for realistic, unique face headshots on a clean white studio
-background:
-- Do not use any reference tune for this request type.
-- Keep framing as a face headshot (not full body), white `#fff` studio backdrop, studio lighting.
-- Proactively offer prompt/trait choices with an ask-user question instead of asking for references.
-- Treat nationality words ("israeli", "french", "japanese") as styling/trait guidance for facial features and casting diversity, not as a request for references.
-- Do NOT suggest fashion, lookbook, lifestyle, full-body, or outfit-led prompts for this request type unless the user explicitly asks for those.
-
-See the `avatar` skill for the detailed face-trait template.
+Use the available image, video, reference, and template tools for the user's
+request. Saved person references preserve identity across images; supplied
+photos can be used as inputs or registered with `create_reference` when the
+user needs a reusable reference. Private workflow recipes and agent delegation
+are available within Astria, outside this external MCP integration.
 
 ## Interaction rule (strict)
 

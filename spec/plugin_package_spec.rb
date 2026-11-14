@@ -45,6 +45,30 @@ RSpec.describe 'Astria Grok package' do
     expect(File.exist?(File.join(@root, 'extracted/bin'))).to be(false)
   end
 
+  it 'excludes private workflows from the OpenAI archive' do
+    run_script('build-plugin.py', File.join(@root, 'release'))
+    skills = Dir.children(File.join(@root, 'dist/marketplace/plugins/astria/skills'))
+    expect(skills).not_to include('behind-the-scenes', 'fashion-music-track', 'avatar', 'unique-headshot', 'headshots-from-photos', 'headshots', 'mux', 'astria-api', 'product-photoshoot', 'virtual-try-on', 'store-photoshoot', 'music-video', 'motion-design', 'storyboard', 'artboard')
+    expect(skills).to contain_exactly('prompt-writing', 'packs-guide', 'navigation', 'landing-page-editor')
+    skills.each do |name|
+      body = File.read(File.join(@root, 'dist/marketplace/plugins/astria/skills', name, 'SKILL.md'))
+      expect(body).not_to match(/\b(?:get_skill|list_skills|start_agent_run)\b/)
+    end
+  end
+
+  it 'validates nullable tool arguments without accepting an invalid type' do
+    run_script('sync-plugin.py')
+    run_script('validate-plugin.py')
+    source = File.join(@root, 'prompt-writing/SKILL.md')
+    File.open(source, 'a') do |file|
+      file.write("\n```json\n" + JSON.generate({ tool: 'generate_video', arguments: { video_prompt: 'A product film', video_model: 42, duration: '5', num_images: '1', aspect_ratio: '16:9', idempotency_key: 'validation-only', }, }) + "\n```\n")
+    end
+    run_script('sync-plugin.py')
+    stdout, stderr, status = Open3.capture3('python3', File.join(@root, 'scripts/validate-plugin.py'))
+    expect(status.success?).to be(false)
+    expect(stdout + stderr).to include('invalid generate_video.video_model value')
+  end
+
   it 'updates both host manifests and marketplace versions during a release' do
     run_script('set-plugin-version.py', '9.8.7')
     run_script('sync-plugin.py')

@@ -144,38 +144,34 @@ Astria web-agent sandbox remains supported.
 
 ## Skills
 
-`music-video`, `motion-design`, `storyboard`, and the legacy `artboard` alias
-are served by Astria MCP. Discover them with
-`list_skills` and read their current instructions with `get_skill`; they are
-not bundled in the plugin. Named requests such as `/music-video` can be sent
-as chat text, though these remote skills are not local slash-menu entries.
-An authenticated Astria MCP connection with access to the skill tools is
-required to read them. Existing plugin installations keep their bundled
-copies until upgraded.
+The public package bundles four supporting guides: `prompt-writing`,
+`packs-guide`, `navigation`, and `landing-page-editor`. Creative workflow
+recipes are maintained in `skills-private` for Astria's internal agents.
+External MCP clients use the direct generation, reference, and template tools;
+`list_skills`, `get_skill`, and `start_agent_run` are internal-only. Existing
+installations retain old bundled copies until upgraded.
 
-`mux` and `fashion-music-track` remain bundled as small loaders so their names
-are discoverable after installation. They fetch their current instructions
-with `get_skill`; their full recipes are maintained in the private database
-skill source rather than copied into this repository. If the skill tools are
-unavailable or access fails, the loaders report that error. They do not fall
-back to an older recipe.
+The migration was matched by workflow purpose, explicit renames, and aliases:
 
-| Skill | Purpose |
-|-------|---------|
-| **astria-api** | Goal-based routing, MCP results, references, generation, templates and pricing; optional CLI reference |
-| **product-photoshoot** | Ecommerce product shots and coordinated lookbooks with stable SKU references |
-| **virtual-try-on** | Garments and accessories on the chosen person, consistently across scenes |
-| **headshots-from-photos** | Professional portraits of the real person in supplied photos |
-| **prompt-writing** | Prompt syntax, parameters and writing effective prompts |
-| **packs-guide** | Templates, categories and photoshoot workflows |
-| **avatar** | New, original model faces as diverse, realistic headshots with explicit model/face-inpainting settings |
-| **navigation** | Astria app sitemap |
-| **store-photoshoot** | Store catalog to reusable photoshoot workflow; some steps need CLI/UI |
-| **landing-page-editor** | Edit workspace landing HTML through MCP and retain supplied images as workspace assets |
-| **mux** | Load the current workflow to combine video and music and save the final film |
-| **fashion-music-track** | Load the current soundtrack workflow for fashion brands, runway shows and campaign films |
-| **behind-the-scenes** | Candid handheld films from behind the scenes of a fashion shoot |
-| **unique-headshot** | Legacy alias for Avatar |
+| Former bundled skill | Current owner / replacement | Match |
+| --- | --- | --- |
+| avatar | Remote avatar | Same workflow |
+| unique-headshot | Remote avatar | Legacy alias |
+| headshots-from-photos | Remote headshots | Explicit renamed_from in the private manifest |
+| mux | Remote mux | Same workflow; remove the bundled loader too |
+| fashion-music-track | Remote fashion-music-track | Same workflow; remove the bundled loader too |
+| product-photoshoot | Remote packshots, create-packshots/run-packshot, create-lookbook | Product photography was split by deliverable |
+| virtual-try-on | Remote create-lookbook/run-lookbook | Still on-model garment photography; ugc-try-on is a distinct video workflow |
+| store-photoshoot | Private migrate-website | Whole-store discovery and template migration; not currently in the private publication allowlist, so do not promise remote availability |
+| astria-api | Live MCP schemas and remote workflow discovery | Explicitly retired by the server instructions |
+| behind-the-scenes | Private workflow per migration decision | Excluded; no current exact entry in the private publication allowlist |
+| music-video, motion-design, storyboard, artboard | Corresponding remote skills | Already excluded from the public package |
+
+The supporting guides are retained because they provide prompt advice,
+product explanations, navigation, and workspace-page editing rather than
+alternate copies of these creative workflows. The public guides use direct
+MCP tools without depending on internal skill discovery or removed bundled
+directories. No private recipes are copied into the public archive.
 
 ## Development and rollout
 

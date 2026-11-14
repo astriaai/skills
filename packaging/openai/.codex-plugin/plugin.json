@@ -1,6 +1,6 @@
 {
   "name": "astria",
-  "version": "1.5.23",
+  "version": "1.5.26",
   "description": "Create product photos, virtual try-on images, fashion lookbooks, professional headshots from photos, and videos with Astria. Reuse people and product references across scenes or run saved photoshoot templates.",
   "author": {
     "name": "Astria",
@@ -96,7 +96,7 @@
         "demo_recording_url": "https://www.astria.ai/review/astria-mcp-1.5.8-review.mp4"
       },
       "publication": {
-        "release_notes": "MCP-backed Astria plugin with OAuth account connection, image/video generation, embedded result previews, fullscreen gallery entry and bundled MCP-first skills. The CLI remains optional for local files and advanced workflows."
+        "release_notes": "Complete the private-workflow migration, including renamed headshots, avatar aliases, mux, product/lookbook/try-on and store workflows; remove retired astria-api. Bundle only four supporting guides and discover current creative workflows through MCP."
       }
     }
   }

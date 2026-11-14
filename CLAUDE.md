@@ -1,11 +1,12 @@
 # Astria skills — repository guide
 
-The canonical public skills live in top-level `<name>/SKILL.md` directories.
-For database-backed workflows, the full recipe is owned by the private
-`sdbooth/doc/skills/` source and published through `agent_skills:sync`. Public
-`mux` and `fashion-music-track` skills are loaders only: preserve their names
-and triggers, and read their instructions with `get_skill`. Change recipes in
-the private source; do not copy them into the public skills or packaging.
+The public package contains supporting guides only. Creative workflow recipes
+are owned by the sibling `skills-private` repository and published through
+`agent_skills:sync` for internal Astria agents. External MCP clients cannot
+call `list_skills`, `get_skill`, or `start_agent_run`; public guides must use
+available direct tools and must not copy private recipes into the package. Match migrations by workflow purpose, renamed_from entries,
+and legacy aliases, not directory spelling alone. The migration mapping is
+in README.md. `astria-api` is retired; use live MCP schemas.
 Source manifests and assets live in `packaging/`; generated packages and
 marketplaces live under ignored `dist/marketplace/` and ship as release ZIPs. The Astria web-agent sandbox also bundles these
 skills with its independently authenticated CLI and private embedded skills.
