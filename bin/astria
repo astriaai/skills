@@ -35,7 +35,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
-VERSION = "1.34.0"
+VERSION = "1.35.0"
 
 
 def _platform_token():
@@ -376,6 +376,10 @@ API_OPERATIONS.update({
         "path_choice": ["unarchive", "/prompts/{id}/unarchive"]},
     "archive_reference": {"method": "PATCH", "path": "/tunes/{id}/archive", "target": "json_body", "fields": [], "result": {},
         "path_choice": ["unarchive", "/tunes/{id}/unarchive"]},
+    # Lynx region detection on one reference image, as the editor's Detect button. Asynchronous:
+    # get_reference shows the regions in lynx and the outcome in lynx_autotag_status.
+    "detect_reference_regions": {"method": "POST", "path": "/tunes/{id}/images/{blob_id}/lynx_autotag", "target": "json_body",
+        "fields": [], "result": {}},
     # Headless agent runs, reported as A2A tasks. The run id is its chat session id.
     "start_agent_run": {"method": "POST", "path": "/api/agent_runs", "target": "form",
         "fields": [["workspace_id", "workspace", "value"], ["message", "message", "value"]], "result": {}},
@@ -1378,6 +1382,9 @@ def cmd_tunes_update(args, cfg):
 
 def cmd_tunes_archive(args, cfg):
     emit(execute_api_operation("archive_reference", args, cfg))
+
+def cmd_tunes_detect_regions(args, cfg):
+    emit(execute_api_operation("detect_reference_regions", args, cfg))
 
 
 # --------------------------------------------------------------------------
@@ -2571,6 +2578,11 @@ def build_parser(models_record=None):
     p.add_argument("id")
     p.add_argument("--unarchive", action="store_true", help="restore an archived tune instead")
     p.set_defaults(func=cmd_tunes_archive)
+    p = tunes.add_parser("detect-regions", parents=[ws_parent],
+        help="detect the Lynx regions (small text, prints, logos, emblems) on one reference image, replacing its auto-detected ones")
+    p.add_argument("id")
+    p.add_argument("blob_id", help="the image's blob ID, from orig_image_blob_ids of 'astria tunes get'")
+    p.set_defaults(func=cmd_tunes_detect_regions)
 
     # prompts
     prompts = sub.add_parser("prompts", help="image/video generation records").add_subparsers(dest="sub", required=True)
@@ -3041,6 +3053,7 @@ OPERATION_POLICIES = {
     "get_reference": (("tunes", "get"), True, set()),
     "update_reference": (("tunes", "update"), False, set()),
     "archive_reference": (("tunes", "archive"), False, set()),
+    "detect_reference_regions": (("tunes", "detect-regions"), False, set()),
     "create_reference": (("tunes", "create"), False, {"image", "model", "model_type"}),
     "generate_images": (("generate",), False, {"wait", "video_prompt"}),
     "generate_video": (("video",), False, {"wait", "input_image"}),
@@ -3119,6 +3132,7 @@ OPERATION_DESCRIPTIONS = {
     'update_prompt': 'Assign an existing prompt to a template, clear template membership, or move it to an authorized workspace. Pass pack_id or base_pack_id as the string null to clear that assignment. Does not generate, delete or retry an image.',
     'archive_prompt': 'Archive an image, video or music prompt only when the user asks to archive, hide or clean up that result. Pass its id. Archiving hides the prompt from galleries and list_prompts without deleting its media or refunding credits; list_prompts archived=true finds archived prompts. Set unarchive=true to restore one. Requires an idempotency_key.',
     'archive_reference': 'Archive a saved reference only when the user asks to archive, hide or clean up that person, product or garment. Pass its id. Archiving hides the reference from list_references without deleting it or its training images; list_references archived=true finds archived references; templates and prompts that use it keep working. Set unarchive=true to restore one. Requires an idempotency_key. Returns id and archived.',
+    'detect_reference_regions': 'Detect the Lynx regions on one image of a saved product reference: small text, placed or all-over prints, logos and plaques or emblems that a generator tends to garble, which the Lynx pass repairs from the reference. Use when the user asks to detect, re-detect or refresh those regions. Pass the reference id and the image blob_id from orig_image_blob_ids of get_reference. Replaces the image\'s auto-detected regions but refuses while it has regions a person drew. Detection runs in the background, usually 15-40 seconds: returns blob_id and detecting=true, then follow with get_reference, whose lynx and lynx_autotag_status arrays are parallel to orig_image_blob_ids; a status of done or failed means it finished. Does not generate images. Requires an idempotency_key.',
     'list_models': 'Use this when choosing an Astria image, video or music model or checking supported media inputs, image resolutions, aspect ratios, lyrics limits, speech voices, song prices, and defaults. Pass type (image, video or music) to get only that catalog. Returns the live model catalog and model names/tune IDs; does not generate media or spend credits. For video generation, submit null model and resolution fields unless the user explicitly selected them; let Astria resolve defaults. For images and music, use the explicit user selection or catalog default.',
     'list_workspaces': 'Use this when finding an Astria workspace for a team or brand photoshoot. Returns authorized workspace IDs with their brand website, favicon and logo URLs, for duplicate detection. Use the selected ID consistently for references, templates, and generations. Does not create a workspace or generate media.',
     'list_references': 'Use this when finding a saved person, model, garment, product, or SKU for consistent photos, virtual try-on, headshots, or video. Search title/product name/SKU; gallery=true finds public model references. Returns reusable reference IDs and subject classes. Does not create references or generate media; inspect a selected match with get_reference.',
