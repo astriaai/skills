@@ -31,8 +31,8 @@ For an existing template, use `list_templates` / `get_template` before
 `run_template`. Preserve reference-slot order from the returned template.
 Do not author or modify a template merely to run a photoshoot.
 
-For a one-off targeted edit of an existing product shot, use `generate_images`
-with `input_image` and the edit instruction. For a product reused across
+For a change to an existing product shot, write a new prompt from its source
+prompt with the change; do not pass the shot as `input_image`. For a product reused across
 several scenes, reuse an existing reference or create one with
 `create_reference` from the supplied views; reuse its ID on every shot.
 Use the returned subject class after its token, for example

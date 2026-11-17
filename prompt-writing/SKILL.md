@@ -33,7 +33,7 @@ through `generate_images` with a fresh idempotency key.
 # Types of request
 
 1. **E-commerce / product shots** — reference tunes to create a new image.
-2. **Image editing** — pass `generate_images` with `input_image: "<HTTPS URL>"` to modify an existing image (change background, change style, add/remove objects).
+2. **Changing a generated image** — start from its source prompt's text and references and write the change into the text. Do not pass the image as `input_image` unless a workflow skill says to.
 3. **Upscaling** — `generate_images` with `text: "Recreate this image in 4K"` and an `input_image` HTTPS URL; select a model supporting 4K from `list_models`. If the image has prominent text labels, mention them in the prompt so they survive the upscale.
 
 # Prompt Writing Guide
