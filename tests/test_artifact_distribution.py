@@ -47,7 +47,7 @@ class ArtifactDistributionTest(unittest.TestCase):
                 entry = json.loads((installed / relative).read_text())["plugins"][0]
                 source = entry["source"]
                 path = source["path"] if isinstance(source, dict) else source
-                self.assertTrue((installed / path / "skills/astria-api/SKILL.md").is_file(), key)
+                self.assertTrue((installed / path / "skills/prompt-writing/SKILL.md").is_file(), key)
             self.assertTrue((installed / "plugins/astria/bin/astria").stat().st_mode & 0o111)
             self.assertEqual(json.loads((installed / "plugins/astria/plugin.json").read_text())["name"], "astria")
             with zipfile.ZipFile(output / f"astria-{version}.zip") as bundle:
