@@ -1,0 +1,4 @@
+interface:
+  display_name: "Behind the Scenes"
+  short_description: "Direct a candid fashion shoot behind the scenes"
+  default_prompt: "Use $behind-the-scenes to direct a candid film around my fashion shoot, using my person, garment and location references."

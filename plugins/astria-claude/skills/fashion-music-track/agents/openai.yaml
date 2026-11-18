@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fashion Music Track"
+  short_description: "Compose a track for a fashion brand, show or film"
+  default_prompt: "Use $fashion-music-track to compose a music track for my collection, runway show or campaign film from my brief and references."
