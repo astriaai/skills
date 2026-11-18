@@ -35,21 +35,31 @@ before reinstalling. Keep the extracted folder for as long as it is registered.
 The first release containing these new assets must be published before using
 the helper; older releases do not contain the marketplace ZIP.
 
-## Install in Codex
+## Install from the Astria marketplace
 
-After extracting the marketplace ZIP to `/absolute/path/astria-marketplace`:
+Every tagged release is published as built packages on this repository's
+`marketplace` branch (`scripts/publish-marketplace-branch.sh`). Each release
+adds one commit, so Git marketplace upgrades fast-forward.
+
+**ChatGPT workspace (Business, Enterprise, Edu admins):** open **Admin >
+Plugins > Add > Import marketplace**. Enter Source
+`https://github.com/astriaai/skills`, leave Path empty and enter branch
+`marketplace`. After the import, make the Astria plugin available to your
+members. ChatGPT syncs the marketplace daily. Members install Astria from
+Plugins and complete Astria OAuth sign-in.
+
+**Codex:**
 
 ```bash
-codex plugin marketplace add /absolute/path/astria-marketplace
+codex plugin marketplace add astriaai/skills --ref marketplace
 codex plugin add astria@astria
 ```
 
-Complete Astria OAuth through the plugin/MCP connection settings. Start a new
-chat after installing or upgrading. The source repository no longer ships a
-ready-to-install Git marketplace. ChatGPT administrator GitHub marketplace
-imports need a repository containing built packages; use the reviewed public
-plugin or a separately hosted generated repository for that distribution route.
-See [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins).
+Upgrade with `codex plugin marketplace upgrade astria`. Offline, extract the
+release marketplace ZIP and pass its absolute path to
+`codex plugin marketplace add` instead. Complete Astria OAuth through the
+plugin/MCP connection settings. Start a new chat after installing or
+upgrading. See [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins).
 
 ## Install in Claude (web, desktop and mobile)
 
