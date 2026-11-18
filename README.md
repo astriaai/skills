@@ -39,19 +39,23 @@ the helper; older releases do not contain the marketplace ZIP.
 
 Every tagged release is published as built packages on this repository's
 `marketplace` branch (`scripts/publish-marketplace-branch.sh`). Each release
-adds one commit, so Git marketplace upgrades fast-forward.
+adds one commit, so Git marketplace upgrades fast-forward. The default
+branch's `.agents/plugins/marketplace.json` points at that branch, so adding
+`astriaai/skills` needs no branch.
+
+**ChatGPT desktop:** open **Plugins > Add plugin marketplace** and enter
+`astriaai/skills`, then install Astria and complete Astria OAuth sign-in.
 
 **ChatGPT workspace (Business, Enterprise, Edu admins):** open **Admin >
 Plugins > Add > Import marketplace**. Enter Source
-`https://github.com/astriaai/skills`, leave Path empty and enter branch
-`marketplace`. After the import, make the Astria plugin available to your
-members. ChatGPT syncs the marketplace daily. Members install Astria from
-Plugins and complete Astria OAuth sign-in.
+`https://github.com/astriaai/skills` and leave Path and branch empty. After
+the import, make the Astria plugin available to your members. ChatGPT syncs
+the marketplace daily.
 
 **Codex:**
 
 ```bash
-codex plugin marketplace add astriaai/skills --ref marketplace
+codex plugin marketplace add astriaai/skills
 codex plugin add astria@astria
 ```
 

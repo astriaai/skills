@@ -64,6 +64,14 @@ class ArtifactDistributionTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertTrue((output / "astria-marketplace-9.8.7.zip").is_file())
 
+    def test_default_branch_marketplace_points_at_built_marketplace_branch(self):
+        # ChatGPT desktop adds a Git marketplace without a branch, so the default branch only points at built packages.
+        pointer = json.loads((ROOT / ".agents/plugins/marketplace.json").read_text())
+        codex = json.loads((ROOT / "packaging/marketplaces/codex.json").read_text())
+        self.assertEqual([plugin["source"] for plugin in pointer["plugins"]],
+                         [{"source": "git-subdir", "url": "https://github.com/astriaai/skills.git",
+                           "path": plugin["source"]["path"], "ref": "marketplace"} for plugin in codex["plugins"]])
+
     def test_rejects_corrupt_download_before_extracting(self):
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory) / "plugin"
